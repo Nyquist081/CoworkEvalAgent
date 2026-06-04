@@ -1,0 +1,9 @@
+.worktrees/
+.superpowers/
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+dist/
+.pytest_cache/
+*.db
