@@ -1,0 +1,77 @@
+<h2>🧮 TTTEC 六维评分模型 & 新增模块</h2>
+<p class="subtitle">基于补充契约的完整评分体系</p>
+
+<div style="display: flex; flex-direction: column; gap: 20px; margin-top: 20px;">
+
+  <!-- TTTEC Full Model -->
+  <div class="mockup">
+    <div class="mockup-header">📏 BaselineEvaluator — TTTEC 六维客观分</div>
+    <div class="mockup-body" style="padding: 16px;">
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
+        <div style="background: #e0f2fe; border-radius: 8px; padding: 10px;">
+          <strong>T1 · 任务完成度</strong>
+          <p style="margin:4px 0 0; font-size:12px; color:#555;">Pandas 客观比对 50%<br/>+ LLM 意图分 50%</p>
+        </div>
+        <div style="background: #e0f2fe; border-radius: 8px; padding: 10px;">
+          <strong>T2 · 工具准确率</strong>
+          <p style="margin:4px 0 0; font-size:12px; color:#555;">success / total × 100<br/>无调用→默认100</p>
+        </div>
+        <div style="background: #fef3c7; border-radius: 8px; padding: 10px;">
+          <strong>T3 · 工具效率</strong>
+          <p style="margin:4px 0 0; font-size:12px; color:#555;">100−5×超标次数<br/>每次冗余扣5分</p>
+        </div>
+        <div style="background: #fef3c7; border-radius: 8px; padding: 10px;">
+          <strong>T4 · 思考效率</strong>
+          <p style="margin:4px 0 0; font-size:12px; color:#555;">Token超标率×30<br/>+ 轮次超标×5</p>
+        </div>
+        <div style="background: #dcfce7; border-radius: 8px; padding: 10px;">
+          <strong>E · E2E性能</strong>
+          <p style="margin:4px 0 0; font-size:12px; color:#555;">超时比例映射扣分<br/>max(0,100−超标%)</p>
+        </div>
+        <div style="background: #dcfce7; border-radius: 8px; padding: 10px;">
+          <strong>C · 成本效率</strong>
+          <p style="margin:4px 0 0; font-size:12px; color:#555;">超支比例映射扣分<br/>max(0,100−超支%)</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- New Modules -->
+  <div style="display: flex; gap: 16px;">
+    <div class="mockup" style="flex: 1;">
+      <div class="mockup-header">🔬 src/evaluator/ResultComparator</div>
+      <div class="mockup-body" style="padding: 12px; font-size: 13px;">
+        <ul style="margin:0; padding-left:18px;">
+          <li>Pandas 读取 output + reference 文件</li>
+          <li>按 eval_config.ignore_rules drop 列</li>
+          <li>行/列/数值 diff → T1 客观基础分</li>
+          <li>禁止 LLM 直接读表格文件</li>
+        </ul>
+      </div>
+    </div>
+    <div class="mockup" style="flex: 1;">
+      <div class="mockup-header">📊 src/services/MetaAnalyzer</div>
+      <div class="mockup-body" style="padding: 12px; font-size: 13px;">
+        <ul style="margin:0; padding-left:18px;">
+          <li><strong>pass@k</strong>: k次中≥1次及格→pass</li>
+          <li><strong>pass^k</strong>: k次全部及格→pass</li>
+          <li>按 question_id 折叠计算</li>
+          <li>输出 PP 差值 → 稳定性指标</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fusion Formula -->
+  <div class="mockup">
+    <div class="mockup-header">⚖️ 最终融合公式</div>
+    <div class="mockup-body" style="padding: 14px; text-align: center;">
+      <code style="font-size: 16px;">T1_final = Pandas客观分 × 50% + LLM意图分 × 50%</code>
+      <br/><br/>
+      <code style="font-size: 16px;">总分 = avg(T1, T2, T3, T4, E, C)</code>
+      <br/><br/>
+      <span style="font-size:13px; color:#dc2626;">LLM 裁判只看 Trace 思考日志，不看表格数据</span>
+    </div>
+  </div>
+
+</div>

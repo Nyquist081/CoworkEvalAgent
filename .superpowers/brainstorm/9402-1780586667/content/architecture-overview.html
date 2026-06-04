@@ -1,0 +1,115 @@
+<h2>🏗️ CoworkEval 架构全景图</h2>
+<p class="subtitle">基于两份设计蓝图解析的五层解耦架构</p>
+
+<div style="display: flex; flex-direction: column; gap: 24px; margin-top: 24px;">
+
+  <!-- Layer 1: API -->
+  <div class="mockup">
+    <div class="mockup-header">🔌 接入层 — src/api/</div>
+    <div class="mockup-body" style="padding: 16px;">
+      <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+        <div style="background: #e0f2fe; border-radius: 8px; padding: 12px; flex: 1; min-width: 140px;">
+          <strong>POST /runs</strong>
+          <p style="margin:4px 0 0; font-size:13px; color:#555;">创建评测任务</p>
+        </div>
+        <div style="background: #e0f2fe; border-radius: 8px; padding: 12px; flex: 1; min-width: 140px;">
+          <strong>GET /runs/{id}</strong>
+          <p style="margin:4px 0 0; font-size:13px; color:#555;">查询任务状态 & 结果</p>
+        </div>
+        <div style="background: #e0f2fe; border-radius: 8px; padding: 12px; flex: 1; min-width: 140px;">
+          <strong>WebSocket /ws</strong>
+          <p style="margin:4px 0 0; font-size:13px; color:#555;">实时状态推送</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="text-align: center; color: #888; font-size: 20px;">↓ 依赖注入 ↓</div>
+
+  <!-- Layer 2: Services -->
+  <div class="mockup">
+    <div class="mockup-header">⚙️ 业务逻辑层 — src/services/</div>
+    <div class="mockup-body" style="padding: 16px;">
+      <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+        <div style="background: #fef3c7; border-radius: 8px; padding: 12px; flex: 1; min-width: 160px;">
+          <strong>📋 PipelineRunner</strong>
+          <p style="margin:4px 0 0; font-size:13px; color:#555;">asyncio 并发调度<br/>Semaphore(5) 限流</p>
+        </div>
+        <div style="background: #fef3c7; border-radius: 8px; padding: 12px; flex: 1; min-width: 160px;">
+          <strong>📏 BaselineEvaluator</strong>
+          <p style="margin:4px 0 0; font-size:13px; color:#555;">TTTEC 六维规则打分<br/>非线性惩罚公式</p>
+        </div>
+        <div style="background: #fef3c7; border-radius: 8px; padding: 12px; flex: 1; min-width: 160px;">
+          <strong>🧠 JudgeEvaluator</strong>
+          <p style="margin:4px 0 0; font-size:13px; color:#555;">LLM 语义诊断<br/>指数退避重试</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="text-align: center; color: #888; font-size: 20px;">↓ 依赖倒置 (DIP) ↓</div>
+
+  <!-- Layer 3: Core Interfaces -->
+  <div class="mockup">
+    <div class="mockup-header">🧩 核心领域层 — src/core/</div>
+    <div class="mockup-body" style="padding: 16px;">
+      <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+        <div style="background: #f3e8ff; border-radius: 8px; padding: 12px; flex: 1; min-width: 140px;">
+          <strong>interfaces.py</strong>
+          <p style="margin:4px 0 0; font-size:13px; color:#555;">BaseEvaluator (ABC)<br/>RunRepository (ABC)<br/>ScoreRepository (ABC)</p>
+        </div>
+        <div style="background: #f3e8ff; border-radius: 8px; padding: 12px; flex: 1; min-width: 140px;">
+          <strong>schemas.py</strong>
+          <p style="margin:4px 0 0; font-size:13px; color:#555;">Manifest, QuestionItem<br/>TaskRun, ScoreResult<br/>EvalResult</p>
+        </div>
+        <div style="background: #f3e8ff; border-radius: 8px; padding: 12px; flex: 1; min-width: 140px;">
+          <strong>exceptions.py</strong>
+          <p style="margin:4px 0 0; font-size:13px; color:#555;">IncompleteTraceError<br/>EvaluationError</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="text-align: center; color: #888; font-size: 20px;">↓ 接口实现 ↓</div>
+
+  <!-- Layer 4: Infrastructure & Repositories -->
+  <div style="display: flex; gap: 16px;">
+    <div class="mockup" style="flex: 1;">
+      <div class="mockup-header">💾 仓储层 — src/repositories/</div>
+      <div class="mockup-body" style="padding: 12px;">
+        <div style="background: #dcfce7; border-radius: 6px; padding: 10px; margin-bottom: 8px;">
+          <strong>RunRepository</strong><br/>
+          <span style="font-size:13px; color:#555;">save_run(), get_run(), update_status()</span>
+        </div>
+        <div style="background: #dcfce7; border-radius: 6px; padding: 10px;">
+          <strong>ScoreRepository</strong><br/>
+          <span style="font-size:13px; color:#555;">save_score(), get_scores_by_run()</span>
+        </div>
+      </div>
+    </div>
+    <div class="mockup" style="flex: 1;">
+      <div class="mockup-header">🔧 基础设施层 — src/infrastructure/</div>
+      <div class="mockup-body" style="padding: 12px;">
+        <div style="background: #fee2e2; border-radius: 6px; padding: 10px; margin-bottom: 8px;">
+          <strong>LLMClient</strong> (适配器)<br/>
+          <span style="font-size:13px; color:#555;">ask_structured_output(prompt, model)</span>
+        </div>
+        <div style="background: #fee2e2; border-radius: 6px; padding: 10px;">
+          <strong>TraceParser</strong><br/>
+          <span style="font-size:13px; color:#555;">parse_jsonl() → trace_data</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- State Machine -->
+  <div class="mockup">
+    <div class="mockup-header">🔄 任务状态机 (TaskRun Lifecycle)</div>
+    <div class="mockup-body" style="padding: 14px; text-align: center; font-family: monospace; font-size: 14px;">
+      PENDING → PARSING_TRACE → EVALUATING_BASELINE → AWAITING_JUDGE → EVALUATING_JUDGE → COMPLETED
+      <br/>
+      <span style="color: #dc2626;">任意环节异常 → FAILED (记录错误栈)</span>
+    </div>
+  </div>
+
+</div>

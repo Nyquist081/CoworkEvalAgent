@@ -1,0 +1,77 @@
+<h2>🏗️ CoworkEval 完整架构（融合三份设计文档）</h2>
+<p class="subtitle">基于架构蓝图 + 业务契约 + 工业报告的完整系统设计</p>
+
+<div style="display: flex; flex-direction: column; gap: 18px; margin-top: 18px;">
+
+  <!-- Three layers overview -->
+  <div style="display: flex; gap: 14px;">
+    <div class="mockup" style="flex: 1; border-top: 3px solid #3b82f6;">
+      <div class="mockup-header">🖥️ Web 前端</div>
+      <div class="mockup-body" style="padding: 10px; font-size: 12px;">
+        <strong>Vue 3 + TS + Element Plus + ECharts</strong>
+        <ul style="margin:4px 0 0 14px;">
+          <li>Dashboard 总览</li>
+          <li>版本详情页</li>
+          <li>多版本对比（雷达图/热力图/趋势线）</li>
+          <li>共性分析面板</li>
+          <li>pass@k / pass^k 可视化</li>
+        </ul>
+      </div>
+    </div>
+    <div class="mockup" style="flex: 1; border-top: 3px solid #22c55e;">
+      <div class="mockup-header">⚙️ Backend (FastAPI)</div>
+      <div class="mockup-body" style="padding: 10px; font-size: 12px;">
+        <strong>5 层解耦架构</strong>
+        <ul style="margin:4px 0 0 14px;">
+          <li>API 接入层</li>
+          <li>Services 业务层（评估器+融合+共性分析）</li>
+          <li>Core 领域层（接口+Schema+状态机）</li>
+          <li>Repositories 仓储层</li>
+          <li>Infrastructure 基础设施（LLM+TraceParser）</li>
+        </ul>
+      </div>
+    </div>
+    <div class="mockup" style="flex: 1; border-top: 3px solid #a855f7;">
+      <div class="mockup-header">🤖 CoworkEval Agent</div>
+      <div class="mockup-body" style="padding: 10px; font-size: 12px;">
+        <strong>本地边车代理</strong>
+        <ul style="margin:4px 0 0 14px;">
+          <li>领取评测任务</li>
+          <li>执行 Agent 工作流</li>
+          <li>上报 JSONL Trace</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Evaluation Pipeline -->
+  <div class="mockup">
+    <div class="mockup-header">📊 三层评测体系</div>
+    <div class="mockup-body" style="padding: 12px; font-size: 13px;">
+      <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+        <span style="background:#e0f2fe; padding:8px 12px; border-radius:6px;"><strong>第一层</strong><br/>Baseline 评分<br/>TTTEC 六维规则</span>
+        <span>→</span>
+        <span style="background:#fef3c7; padding:8px 12px; border-radius:6px;"><strong>第二层</strong><br/>裁判模型评测<br/>四维语义诊断</span>
+        <span>→</span>
+        <span style="background:#dcfce7; padding:8px 12px; border-radius:6px;"><strong>50:50 融合</strong><br/>Baseline + Judge<br/>互补评分</span>
+        <span>→</span>
+        <span style="background:#f3e8ff; padding:8px 12px; border-radius:6px;"><strong>第三层</strong><br/>共性分析<br/>版本级洞察</span>
+        <span>→</span>
+        <span style="background:#fee2e2; padding:8px 12px; border-radius:6px;"><strong>多版本对比</strong><br/>pass@k/pass^k<br/>趋势追踪</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- State Machine -->
+  <div class="mockup">
+    <div class="mockup-header">🔄 任务状态机 + 事件驱动融合</div>
+    <div class="mockup-body" style="padding: 12px; text-align: center;">
+      <code>PENDING → PARSING_TRACE → EVALUATING_BASELINE → AWAITING_JUDGE → EVALUATING_JUDGE → COMPLETED</code>
+      <br/>
+      <span style="font-size:12px; color:#666;">
+        JSONL导入 → 自动Baseline → 自动触发裁判 → 裁判完成→自动融合重算 → 共性分析（版本终态触发）
+      </span>
+    </div>
+  </div>
+
+</div>
