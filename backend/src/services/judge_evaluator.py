@@ -2,6 +2,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from pathlib import Path
 from typing import Optional
 from uuid import UUID
 
@@ -15,6 +16,15 @@ from src.infrastructure.llm_gateway import LLMClient
 logger = logging.getLogger(__name__)
 
 JUDGE_SYSTEM_PROMPT = """You are an expert agent evaluator. Your job is to review an agent's execution trace and provide a detailed, evidence-based assessment.
+
+## CRITICAL: Task Relevance Check First
+Before scoring, you MUST verify the trace is actually executing the assigned task:
+- Read the "题目要求的输入文件" and "题目要求的输出目录" sections
+- Check if the agent in the trace worked on THOSE files or completely different files
+- If the trace is for a DIFFERENT task than what the question asks:
+  * task_completion MUST be 0
+  * execution_efficiency should still reflect the trace's objective quality
+  * Explain the mismatch clearly in conclusion
 
 ## Scoring Rubric (0-100)
 
@@ -82,9 +92,16 @@ class JudgeEvaluator(BaseEvaluator):
         # Format trace as Step-numbered text
         trace_text = self._format_trace(trace_data)
 
-        # Build user prompt
+        # Build user prompt with question context so judge can verify task relevance
         fatal_rules = question.eval_config.fatal_rules if question.eval_config else []
         skills_expected = question.skills if question.skills else ""
+
+        # Load the question's actual task prompt from prompt_file
+        question_prompt = ""
+        if question.prompt_file:
+            prompt_path = Path(question.prompt_file)
+            if prompt_path.exists():
+                question_prompt = prompt_path.read_text(encoding="utf-8")[:1000]
 
         user_prompt = self._build_user_prompt(
             question_id=question.question_id,
@@ -92,6 +109,9 @@ class JudgeEvaluator(BaseEvaluator):
             trace_text=trace_text,
             fatal_rules=fatal_rules,
             skills_expected=skills_expected,
+            question_prompt=question_prompt,
+            expected_inputs=question.input_files,
+            expected_output_dir=question.output_dir,
         )
 
         # Call LLM with retry
@@ -173,13 +193,40 @@ class JudgeEvaluator(BaseEvaluator):
         trace_text: str,
         fatal_rules: list,
         skills_expected: str,
+        question_prompt: str = "",
+        expected_inputs: list[str] | None = None,
+        expected_output_dir: str = "",
     ) -> str:
         parts = [
-            f"## 评测任务",
+            f"## 评测题目",
             f"题目 ID: {question_id}",
             f"题目名称: {question_name}",
             "",
         ]
+
+        # CRITICAL: Include the actual task description so judge can verify relevance
+        if question_prompt:
+            parts.append(f"## 题目的任务要求（Agent 应该执行的任务）")
+            parts.append(question_prompt)
+            parts.append("")
+
+        if expected_inputs:
+            parts.append(f"## 题目要求的输入文件: {', '.join(expected_inputs)}")
+            parts.append("请检查 Agent 是否操作了这些文件，还是操作了不相关的文件。")
+            parts.append("")
+
+        if expected_output_dir:
+            parts.append(f"## 题目要求的输出目录: {expected_output_dir}")
+            parts.append("")
+
+        # TASK RELEVANCE CHECK — the gate
+        parts.append("## ⚠️ 任务相关性检查（最重要！先做这一步）")
+        parts.append("首先判断 Trace 中的 Agent 是否在执行**这道题目要求的任务**：")
+        parts.append("- 检查 Trace Step 1 的 user_question 是否与题目任务要求匹配")
+        parts.append("- 检查 Agent 操作的文件是否与题目要求的输入文件相关")
+        parts.append("- 如果 Trace 明显在执行另一个不相关的任务（例如题目要求分析告警但 Trace 在分析经营数据），")
+        parts.append("  则 task_completion 必须判定为 0，并在 conclusion 中明确说明「Trace 与题目不匹配」")
+        parts.append("")
 
         if skills_expected:
             parts.append(f"## 期望触发的 Skill: {skills_expected}")
