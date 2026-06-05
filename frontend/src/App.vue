@@ -1,7 +1,7 @@
 <template>
   <el-container style="min-height: 100vh">
     <el-header style="background: #1a1a2e; color: white; display: flex; align-items: center; padding: 0 24px;">
-      <h2 style="margin: 0; font-weight: 300;">CoworkEval</h2>
+      <h2 style="margin: 0; font-weight: 300; cursor: pointer;" @click="goHome">CoworkEval</h2>
       <el-menu mode="horizontal" :default-active="route.path" router
         style="margin-left: 40px; border-bottom: none; background: transparent;">
         <el-menu-item index="/" style="color: #ccc;">📊 Dashboard</el-menu-item>
@@ -15,6 +15,8 @@
 </template>
 
 <script setup lang="ts">
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 const route = useRoute()
+const router = useRouter()
+function goHome() { router.push('/') }
 </script>

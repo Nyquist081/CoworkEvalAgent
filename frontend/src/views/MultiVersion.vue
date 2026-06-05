@@ -1,5 +1,6 @@
 <template>
   <div>
+    <el-button @click="goBack" style="margin-bottom:12px;" icon="ArrowLeft">返回 Dashboard</el-button>
     <h1>📈 多版本对比</h1>
     <el-card>
       <el-form inline>
@@ -10,7 +11,6 @@
       </el-form>
     </el-card>
 
-    <!-- Pass Rate Cards -->
     <el-row :gutter="16" style="margin-top:16px;" v-if="passRates.length">
       <el-col :span="8" v-for="p in passRates" :key="p.label">
         <el-card shadow="hover">
@@ -32,21 +32,28 @@
         </el-card>
       </el-col>
     </el-row>
-
     <el-empty v-if="!passRates.length && loaded" description="选择 Run IDs 查看对比" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import axios from 'axios'
+
 const API='/coworkeval/v1'
-const ids=ref(''); const passRates=ref<any[]>([]); const loaded=ref(false)
-async function load(){
-  loaded.value=true
-  try{
-    const r=await axios.get(`${API}/compare/pass-rate`,{params:{run_ids:ids.value}})
-    passRates.value=r.data.runs||[]
-  }catch(e){console.error(e)}
+const router = useRouter()
+const ids = ref('')
+const passRates = ref<any[]>([])
+const loaded = ref(false)
+
+function goBack() { router.push('/') }
+
+async function load() {
+  loaded.value = true
+  try {
+    const r = await axios.get(`${API}/compare/pass-rate`, { params: { run_ids: ids.value } })
+    passRates.value = r.data.runs || []
+  } catch(e) { console.error(e) }
 }
 </script>

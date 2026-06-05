@@ -1,7 +1,7 @@
 <template>
   <div>
-    <el-page-header @back="$router.push('/')" title="返回" />
-    <h2 style="margin-top:16px;">📋 版本详情 — {{ runId }}</h2>
+    <el-button @click="goBack" style="margin-bottom:12px;" icon="ArrowLeft">返回 Dashboard</el-button>
+    <h2>📋 版本详情 — {{ runId }}</h2>
 
     <el-row :gutter="16" style="margin:16px 0;" v-if="scores.length">
       <el-col :span="4" v-for="d in avgDims" :key="d.key">
@@ -15,13 +15,13 @@
     <el-card>
       <template #header>题目评分 ({{ scores.length }})</template>
       <el-table :data="scores" stripe @row-click="showDetail" style="cursor:pointer;">
-        <el-table-column prop="question_id" label="题目" width="180" />
-        <el-table-column label="T1" width="60"><template #default="{r}">{{ r.t1_completion?.toFixed(0)??'-' }}</template></el-table-column>
-        <el-table-column label="T2" width="60"><template #default="{r}">{{ r.t2_accuracy?.toFixed(0)??'-' }}</template></el-table-column>
-        <el-table-column label="T3" width="60"><template #default="{r}">{{ r.t3_efficiency?.toFixed(0)??'-' }}</template></el-table-column>
-        <el-table-column label="T4" width="60"><template #default="{r}">{{ r.t4_thinking?.toFixed(0)??'-' }}</template></el-table-column>
-        <el-table-column label="E" width="60"><template #default="{r}">{{ r.e_performance?.toFixed(0)??'-' }}</template></el-table-column>
-        <el-table-column label="C" width="60"><template #default="{r}">{{ r.c_cost?.toFixed(0)??'-' }}</template></el-table-column>
+        <el-table-column prop="question_id" label="题目" width="200" />
+        <el-table-column label="T1" width="55"><template #default="{r}">{{ r.t1_completion?.toFixed(0)??'-' }}</template></el-table-column>
+        <el-table-column label="T2" width="55"><template #default="{r}">{{ r.t2_accuracy?.toFixed(0)??'-' }}</template></el-table-column>
+        <el-table-column label="T3" width="55"><template #default="{r}">{{ r.t3_efficiency?.toFixed(0)??'-' }}</template></el-table-column>
+        <el-table-column label="T4" width="55"><template #default="{r}">{{ r.t4_thinking?.toFixed(0)??'-' }}</template></el-table-column>
+        <el-table-column label="E" width="55"><template #default="{r}">{{ r.e_performance?.toFixed(0)??'-' }}</template></el-table-column>
+        <el-table-column label="C" width="55"><template #default="{r}">{{ r.c_cost?.toFixed(0)??'-' }}</template></el-table-column>
         <el-table-column label="总分" width="80">
           <template #default="{r}">
             <el-tag :type="(r.overall_score??0)>=80?'success':(r.overall_score??0)>=60?'warning':'danger'" size="small">
@@ -61,13 +61,21 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import axios from 'axios'
-const API='/coworkeval/v1'; const route=useRoute(); const runId=computed(()=>route.params.runId as string)
-const scores=ref<any[]>([]); const dialog=ref(false); const selectedQid=ref(''); const detail=ref<any>(null)
-const avgDims=computed(()=>{
+
+const API='/coworkeval/v1'
+const route = useRoute()
+const router = useRouter()
+const runId = computed(() => route.params.runId as string)
+const scores = ref<any[]>([])
+const dialog = ref(false)
+const selectedQid = ref('')
+const detail = ref<any>(null)
+
+const avgDims = computed(() => {
   if(!scores.value.length) return []
-  const a=(k:string)=>(scores.value.reduce((t:number,s:any)=>t+(s[k]??0),0)/scores.value.length).toFixed(1)
+  const a = (k:string) => (scores.value.reduce((t:number,s:any)=>t+(s[k]??0),0)/scores.value.length).toFixed(1)
   return [
     {key:'t1',label:'T1 完成度',val:a('t1_completion'),color:'#409eff'},
     {key:'t2',label:'T2 准确率',val:a('t2_accuracy'),color:'#67c23a'},
@@ -77,7 +85,19 @@ const avgDims=computed(()=>{
     {key:'c',label:'C 成本',val:a('c_cost'),color:'#b37feb'},
   ]
 })
-async function load(){try{const r=await axios.get(`${API}/runs/${runId.value}/scores`);scores.value=r.data||[]}catch(e){console.error(e)}}
-async function showDetail(row:any){selectedQid.value=row.question_id;dialog.value=true;try{const r=await axios.get(`${API}/runs/${runId.value}/scores/${row.question_id}`);detail.value=r.data}catch{detail.value=row}}
+
+function goBack() { router.push('/') }
+
+async function load() {
+  try { const r = await axios.get(`${API}/runs/${runId.value}/scores`); scores.value = r.data||[] }
+  catch(e) { console.error(e) }
+}
+
+async function showDetail(row: any) {
+  selectedQid.value = row.question_id; dialog.value = true
+  try { const r = await axios.get(`${API}/runs/${runId.value}/scores/${row.question_id}`); detail.value = r.data }
+  catch { detail.value = row }
+}
+
 onMounted(load)
 </script>
