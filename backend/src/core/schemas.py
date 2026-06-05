@@ -1,7 +1,7 @@
 from __future__ import annotations
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
@@ -29,7 +29,7 @@ class JudgeDimension(str, Enum):
 # ── Eval Config ──────────────────────────────────────────
 
 class IgnoreRule(BaseModel):
-    type: str
+    type: Literal["column", "row", "region"]
     sheet: Optional[str] = None
     columns: Optional[list[str]] = None
     rows: Optional[list[int]] = None
@@ -89,8 +89,8 @@ class TaskRun(BaseModel):
     error_stack: Optional[str] = None
     is_partial_score: bool = False
     judge_enabled: bool = True
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # ── Score Result ─────────────────────────────────────────
@@ -123,7 +123,7 @@ class ScoreResult(BaseModel):
 
 class CriticalStep(BaseModel):
     step_id: str
-    assessment: str  # "REDUNDANT" or "ERRONEOUS"
+    assessment: Literal["REDUNDANT", "ERRONEOUS"]
     observation: str
     context_chain: str
     root_cause: str
