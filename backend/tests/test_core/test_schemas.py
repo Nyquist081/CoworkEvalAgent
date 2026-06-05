@@ -83,3 +83,27 @@ def test_concrete_evaluator_must_implement_evaluate():
 
     with pytest.raises(TypeError):
         BadEvaluator()
+
+
+def test_incomplete_trace_error():
+    from src.core.exceptions import IncompleteTraceError
+    err = IncompleteTraceError("missing result record", question_id="q-001")
+    assert str(err) == "missing result record"
+    assert err.question_id == "q-001"
+
+
+def test_evaluation_error():
+    from src.core.exceptions import EvaluationError
+    err = EvaluationError("LLM timeout after 3 retries", run_id="run-123")
+    assert err.run_id == "run-123"
+
+
+def test_state_transition_error():
+    from src.core.exceptions import StateTransitionError
+    err = StateTransitionError(
+        from_status="PENDING",
+        to_status="COMPLETED",
+        reason="Must go through intermediate states"
+    )
+    assert err.from_status == "PENDING"
+    assert err.to_status == "COMPLETED"
