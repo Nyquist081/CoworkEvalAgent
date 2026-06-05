@@ -1,7 +1,7 @@
 from __future__ import annotations
 from typing import Optional
 from uuid import UUID
-import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, String, Boolean, DateTime, Text
 from sqlalchemy.dialects.sqlite import BLOB
 from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
@@ -29,9 +29,9 @@ class TaskRunModel(Base):
     error_stack = Column(Text, nullable=True)
     is_partial_score = Column(Boolean, default=False)
     judge_enabled = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.datetime.utcnow,
-                        onupdate=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc),
+                        onupdate=lambda: datetime.now(timezone.utc))
 
     def to_domain(self) -> TaskRun:
         return TaskRun(
@@ -95,7 +95,7 @@ class RunRepositoryImpl(RunRepository):
             if model is None:
                 raise ValueError(f"Run {run_id} not found")
             model.status = status.value
-            model.updated_at = datetime.datetime.utcnow()
+            model.updated_at = datetime.now(timezone.utc)
             if error_stack:
                 model.error_stack = error_stack
             await session.commit()
