@@ -1,0 +1,36 @@
+{
+  "benchmark_id": "sample_bench_001",
+  "name": "Sample Evaluation Benchmark",
+  "version": "1.0.0",
+  "created_at": "2026-06-05T00:00:00+08:00",
+  "created_by": "system",
+  "description": "Sample benchmark for integration testing",
+  "total_questions": 1,
+  "questions": [
+    {
+      "question_id": "sample-q-001",
+      "question_name": "Sample Excel Analysis Task",
+      "category": "Excel",
+      "difficulty": "中等",
+      "prompt_file": "sample-q-001/prompt.txt",
+      "input_files": ["sample-q-001/input/data.xlsx"],
+      "reference_files": ["sample-q-001/reference/answer.xlsx"],
+      "output_dir": "sample-q-001/output/",
+      "eval_config": {
+        "compare_style": false,
+        "ignore_rules": [
+          {"type": "column", "sheet": "Sheet1", "columns": ["K"]}
+        ],
+        "fatal_rules": []
+      },
+      "scene": "skills",
+      "skills": "project_business_analysis",
+      "payload_size_kb": 128.0,
+      "baseline_tokens": 693592,
+      "baseline_rounds": 19,
+      "baseline_tool_count": 17,
+      "baseline_time_ms": 64000,
+      "baseline_cost_usd": 3.58
+    }
+  ]
+}
