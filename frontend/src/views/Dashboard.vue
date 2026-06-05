@@ -1,209 +1,193 @@
 <template>
   <div>
-    <h1>🔬 CoworkEval 评测平台</h1>
+    <h1>📊 CoworkEval 评测平台</h1>
 
-    <!-- Upload & Evaluate -->
-    <el-card style="margin-bottom: 20px; background: #f0f9ff;">
-      <template #header><span style="font-weight: bold;">📤 评测 Trace 文件</span></template>
-      <el-form :inline="true">
-        <el-form-item label="评测集">
-          <el-select v-model="evalForm.benchmark_id" placeholder="选择评测集" @change="onBenchmarkChange">
-            <el-option v-for="m in manifests" :key="m.benchmark_id" :label="m.benchmark_id" :value="m.benchmark_id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="题目">
-          <el-select v-model="evalForm.question_id" placeholder="选择题号">
-            <el-option v-for="q in selectedQuestions" :key="q.question_id" :label="`${q.question_id}: ${q.question_name}`" :value="q.question_id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="Trace 文件">
-          <input type="file" accept=".jsonl" @change="onFileSelected" ref="fileInputRef" style="display:none;" />
-          <el-button @click="fileInputRef?.click()">
-            {{ evalForm.fileName || '选择 .jsonl 文件' }}
-          </el-button>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="runEvaluation" :loading="evaluating" :disabled="!canEvaluate">
-            🚀 评测
-          </el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
+    <el-row :gutter="20">
+      <!-- Left: New Evaluation -->
+      <el-col :span="12">
+        <el-card header="🚀 新建评测任务" style="margin-bottom: 20px;">
+          <el-form label-width="80px">
+            <el-form-item label="评测集">
+              <el-select v-model="form.benchmark_id" placeholder="选择已有评测集" @change="loadQuestions" style="width: 100%;">
+                <el-option v-for="m in allManifests" :key="m.benchmark_id" :label="m.benchmark_id" :value="m.benchmark_id" />
+              </el-select>
+              <el-divider style="margin: 8px 0;" />
+              <input type="file" accept=".json" @change="uploadManifest" ref="manifestInput" style="display:none" />
+              <el-button size="small" @click="($refs.manifestInput as any)?.click()">或上传新的 Manifest JSON</el-button>
+              <span v-if="uploadMsg" style="margin-left: 8px; color: #67c23a;">{{ uploadMsg }}</span>
+            </el-form-item>
 
-    <!-- Evaluation Result -->
-    <el-card v-if="evalResult" style="margin-bottom: 20px; border: 2px solid #409eff;">
-      <template #header>
-        <span style="font-weight: bold;">📊 评测结果 — {{ evalResult.question_id }}</span>
-      </template>
-      <el-row :gutter="16">
-        <el-col :span="4" v-for="d in evalDimensions" :key="d.key">
-          <div style="text-align: center; padding: 8px;">
-            <div style="font-size: 24px; font-weight: bold;" :style="{color: d.color}">{{ d.value }}</div>
-            <div style="font-size: 12px; color: #666;">{{ d.label }}</div>
+            <el-form-item label="题目">
+              <el-select v-model="form.question_id" placeholder="选择题号" style="width: 100%;">
+                <el-option v-for="q in currentQuestions" :key="q.question_id"
+                  :label="`${q.question_id}: ${q.question_name} [${q.difficulty}]`" :value="q.question_id" />
+              </el-select>
+            </el-form-item>
+
+            <el-form-item label="Trace">
+              <input type="file" accept=".jsonl" @change="(e: any) => form.traceFile = e.target?.files?.[0]" />
+            </el-form-item>
+
+            <el-form-item>
+              <el-button type="primary" @click="runEval" :loading="running" :disabled="!canRun">
+                🚀 开始评测
+              </el-button>
+              <el-checkbox v-model="form.useJudge" style="margin-left: 12px;">启用裁判模型</el-checkbox>
+            </el-form-item>
+          </el-form>
+        </el-card>
+
+        <!-- Result -->
+        <el-card v-if="lastResult" header="📋 最新评测结果" style="border: 2px solid #409eff;">
+          <div v-if="lastResult.question_id">
+            <el-row :gutter="12">
+              <el-col :span="4" v-for="d in scoreDims" :key="d.key">
+                <div style="text-align: center;">
+                  <div style="font-size: 22px; font-weight: bold;" :style="{color: d.color}">{{ d.val }}</div>
+                  <div style="font-size: 11px; color: #999;">{{ d.label }}</div>
+                </div>
+              </el-col>
+            </el-row>
+            <el-divider />
+            <el-descriptions :column="3" size="small">
+              <el-descriptions-item label="工具调用">{{ lastResult.metrics?.tool_calls }}</el-descriptions-item>
+              <el-descriptions-item label="Token">{{ lastResult.metrics?.tokens?.toLocaleString() }}</el-descriptions-item>
+              <el-descriptions-item label="耗时">{{ lastResult.metrics?.duration_ms }}ms</el-descriptions-item>
+              <el-descriptions-item label="成功">{{ lastResult.metrics?.success_calls }}</el-descriptions-item>
+              <el-descriptions-item label="轮次">{{ lastResult.metrics?.rounds }}</el-descriptions-item>
+              <el-descriptions-item label="成本">${{ lastResult.metrics?.cost_usd }}</el-descriptions-item>
+            </el-descriptions>
+            <el-button type="primary" size="small" @click="$router.push(`/runs/${lastResult.run_id}`)" style="margin-top: 8px;">
+              查看详情 →
+            </el-button>
           </div>
-        </el-col>
-      </el-row>
-      <el-divider />
-      <el-descriptions :column="3" size="small">
-        <el-descriptions-item label="工具调用">{{ evalResult.metrics.tool_calls }}</el-descriptions-item>
-        <el-descriptions-item label="成功">{{ evalResult.metrics.success_calls }}</el-descriptions-item>
-        <el-descriptions-item label="Token">{{ evalResult.metrics.tokens?.toLocaleString() }}</el-descriptions-item>
-        <el-descriptions-item label="轮次">{{ evalResult.metrics.rounds }}</el-descriptions-item>
-        <el-descriptions-item label="耗时">{{ evalResult.metrics.duration_ms }}ms</el-descriptions-item>
-        <el-descriptions-item label="成本">${{ evalResult.metrics.cost_usd }}</el-descriptions-item>
-      </el-descriptions>
-    </el-card>
+        </el-card>
+      </el-col>
 
-    <!-- Task History -->
-    <el-card>
-      <template #header>
-        <div style="display: flex; justify-content: space-between;">
-          <span>📋 评测历史</span>
-          <el-button size="small" @click="refresh">刷新</el-button>
-        </div>
-      </template>
-      <el-table :data="runs" v-loading="loading" stripe empty-text="暂无评测记录，上传 Trace 开始评测">
-        <el-table-column prop="benchmark_id" label="评测集" width="180" />
-        <el-table-column label="Run ID" width="120">
-          <template #default="{ row }">
-            <el-link type="primary" @click="goToRun(row.id)">{{ row.id?.substring(0, 8) }}...</el-link>
-          </template>
-        </el-table-column>
-        <el-table-column prop="status" label="状态" width="120">
-          <template #default="{ row }">
-            <el-tag :type="statusTag(row.status)">{{ row.status }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="created_at" label="时间" width="180">
-          <template #default="{ row }">{{ formatDate(row.created_at) }}</template>
-        </el-table-column>
-        <el-table-column label="操作">
-          <template #default="{ row }">
-            <el-button size="small" @click="goToRun(row.id)">查看详情</el-button>
-            <el-button size="small" type="danger" @click="deleteRun(row.id)">删除</el-button>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+      <!-- Right: Runs History -->
+      <el-col :span="12">
+        <el-card header="📋 评测历史" style="margin-bottom: 20px;">
+          <el-table :data="runs" empty-text="暂无评测记录" size="small" max-height="400">
+            <el-table-column label="Run" width="100">
+              <template #default="{ row }">
+                <el-link type="primary" @click="$router.push(`/runs/${row.id}`)">{{ row.id?.substring(0, 8) }}</el-link>
+              </template>
+            </el-table-column>
+            <el-table-column prop="benchmark_id" label="评测集" width="160" />
+            <el-table-column label="状态" width="90">
+              <template #default="{ row }">
+                <el-tag :type="row.status==='COMPLETED'?'success':row.status==='FAILED'?'danger':'warning'" size="small">
+                  {{ row.status }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="时间" width="150">
+              <template #default="{ row }">{{ row.created_at ? new Date(row.created_at).toLocaleString('zh-CN') : '' }}</template>
+            </el-table-column>
+          </el-table>
+        </el-card>
+
+        <!-- Quick stats -->
+        <el-card header="📈 评测集概览">
+          <el-table :data="allManifests" size="small" empty-text="暂无评测集">
+            <el-table-column prop="benchmark_id" label="ID" />
+            <el-table-column prop="total_questions" label="题目数" width="80" />
+            <el-table-column prop="version" label="版本" width="80" />
+          </el-table>
+        </el-card>
+      </el-col>
+    </el-row>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
-import { runsApi, manifestsApi } from '../api'
-import { ElMessage, ElMessageBox } from 'element-plus'
 import axios from 'axios'
+import { ElMessage } from 'element-plus'
 
-const router = useRouter()
-const fileInputRef = ref<HTMLInputElement | null>(null)
-const loading = ref(false)
-const evaluating = ref(false)
+const API = 'http://localhost:8000/coworkeval/v1'
+
+const running = ref(false)
+const allManifests = ref<any[]>([])
+const currentQuestions = ref<any[]>([])
 const runs = ref<any[]>([])
-const manifests = ref<any[]>([])
-const selectedQuestions = ref<any[]>([])
-const evalResult = ref<any>(null)
+const lastResult = ref<any>(null)
+const uploadMsg = ref('')
 
-const evalForm = reactive({
+const form = reactive({
   benchmark_id: '',
   question_id: '',
-  fileName: '',
-  file: null as File | null,
+  traceFile: null as File | null,
+  useJudge: false,
 })
 
-const canEvaluate = computed(() =>
-  evalForm.benchmark_id && evalForm.question_id && evalForm.file
-)
+const canRun = computed(() => form.benchmark_id && form.question_id && form.traceFile)
 
-const evalDimensions = computed(() => {
-  if (!evalResult.value) return []
-  const s = evalResult.value.scores
+const scoreDims = computed(() => {
+  if (!lastResult.value?.scores) return []
+  const s = lastResult.value.scores
   return [
-    { key: 't1', label: 'T1 完成度', value: s.t1_completion?.toFixed(1) ?? '-', color: '#409eff' },
-    { key: 't2', label: 'T2 准确率', value: s.t2_accuracy?.toFixed(1) ?? '-', color: '#67c23a' },
-    { key: 't3', label: 'T3 效率', value: s.t3_efficiency?.toFixed(1) ?? '-', color: '#e6a23c' },
-    { key: 't4', label: 'T4 思考', value: s.t4_thinking?.toFixed(1) ?? '-', color: '#f56c6c' },
-    { key: 'e', label: 'E 性能', value: s.e_performance?.toFixed(1) ?? '-', color: '#909399' },
-    { key: 'c', label: 'C 成本', value: s.c_cost?.toFixed(1) ?? '-', color: '#b37feb' },
+    { key:'t1',label:'T1 完成度',val:s.t1_completion?.toFixed(1)??'-',color:'#409eff'},
+    { key:'t2',label:'T2 准确率',val:s.t2_accuracy?.toFixed(1)??'-',color:'#67c23a'},
+    { key:'t3',label:'T3 效率',val:s.t3_efficiency?.toFixed(1)??'-',color:'#e6a23c'},
+    { key:'t4',label:'T4 思考',val:s.t4_thinking?.toFixed(1)??'-',color:'#f56c6c'},
+    { key:'e',label:'E 性能',val:s.e_performance?.toFixed(1)??'-',color:'#909399'},
+    { key:'c',label:'C 成本',val:s.c_cost?.toFixed(1)??'-',color:'#b37feb'},
   ]
 })
 
-function onBenchmarkChange(bid: string) {
-  const m = manifests.value.find((x: any) => x.benchmark_id === bid)
-  selectedQuestions.value = m?.questions || []
-  evalForm.question_id = ''
-}
-
-function onFileSelected(e: Event) {
-  const target = e.target as HTMLInputElement
-  if (target.files?.[0]) {
-    evalForm.file = target.files[0]
-    evalForm.fileName = target.files[0].name
+async function loadData() {
+  try {
+    const [mRes, rRes] = await Promise.all([
+      axios.get(`${API}/manifests`),
+      axios.get(`${API}/runs`),
+    ])
+    allManifests.value = mRes.data || []
+    runs.value = rRes.data || []
+  } catch (e: any) {
+    console.error('Load error:', e.message)
   }
 }
 
-async function runEvaluation() {
-  if (!canEvaluate.value) return
-  evaluating.value = true
-  evalResult.value = null
-  try {
-    const form = new FormData()
-    form.append('benchmark_id', evalForm.benchmark_id)
-    form.append('question_id', evalForm.question_id)
-    form.append('trace_file', evalForm.file!)
-    form.append('judge_enabled', 'false')
+function loadQuestions(bid: string) {
+  const m = allManifests.value.find((x: any) => x.benchmark_id === bid)
+  currentQuestions.value = m?.questions || []
+}
 
-    const res = await axios.post('http://localhost:8000/coworkeval/v1/runs/evaluate', form)
-    evalResult.value = res.data
+async function uploadManifest(e: Event) {
+  const file = (e.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  const fd = new FormData()
+  fd.append('file', file)
+  try {
+    const res = await axios.post(`${API}/manifests/upload`, fd)
+    uploadMsg.value = `已注册: ${res.data.benchmark_id}`
+    await loadData()
+  } catch (err: any) {
+    uploadMsg.value = '上传失败'
+  }
+}
+
+async function runEval() {
+  if (!canRun.value) return
+  running.value = true
+  lastResult.value = null
+  try {
+    const fd = new FormData()
+    fd.append('benchmark_id', form.benchmark_id)
+    fd.append('question_id', form.question_id)
+    fd.append('trace_file', form.traceFile!)
+    fd.append('judge_enabled', String(form.useJudge))
+    const res = await axios.post(`${API}/runs/evaluate`, fd)
+    lastResult.value = res.data
     ElMessage.success('评测完成！')
-    await refresh()
+    await loadData()
   } catch (e: any) {
     ElMessage.error('评测失败: ' + (e.response?.data?.detail || e.message))
   } finally {
-    evaluating.value = false
+    running.value = false
   }
 }
 
-async function refresh() {
-  loading.value = true
-  try {
-    const [runsRes, manifestsRes] = await Promise.all([
-      runsApi.list(),
-      manifestsApi.list(),
-    ])
-    runs.value = runsRes.data || []
-    manifests.value = manifestsRes.data || []
-    if (manifests.value.length > 0 && !evalForm.benchmark_id) {
-      evalForm.benchmark_id = manifests.value[0].benchmark_id
-      onBenchmarkChange(evalForm.benchmark_id)
-    }
-  } catch (e: any) {
-    console.error('Load error:', e)
-  } finally {
-    loading.value = false
-  }
-}
-
-function goToRun(runId: string) {
-  router.push(`/runs/${runId}`)
-}
-
-async function deleteRun(runId: string) {
-  try {
-    await ElMessageBox.confirm('确定删除？', '确认', { type: 'warning' })
-    await runsApi.delete(runId)
-    ElMessage.success('已删除')
-    await refresh()
-  } catch {}
-}
-
-function statusTag(s: string): any {
-  return s === 'COMPLETED' ? 'success' : s === 'FAILED' ? 'danger' : s === 'PENDING' ? 'info' : 'warning'
-}
-
-function formatDate(d: string) {
-  return d ? new Date(d).toLocaleString('zh-CN') : ''
-}
-
-onMounted(refresh)
+onMounted(loadData)
 </script>
