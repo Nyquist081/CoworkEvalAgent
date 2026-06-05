@@ -36,7 +36,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import axios from 'axios'
-const API='http://localhost:8000/coworkeval/v1'; const route=useRoute(); const runId=computed(()=>route.params.runId as string)
+const API='/coworkeval/v1'; const route=useRoute(); const runId=computed(()=>route.params.runId as string)
 const passRate=ref<any>(null); const issues=ref<any[]>([])
 onMounted(async()=>{
   try{const r=await axios.get(`${API}/meta/${runId.value}/pass-rate`);passRate.value=r.data}catch(e){console.error(e)}

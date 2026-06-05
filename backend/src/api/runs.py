@@ -111,10 +111,7 @@ async def list_runs(benchmark_id: str | None = None, status: RunStatus | None = 
     if benchmark_id:
         runs = await repo.list_by_benchmark(benchmark_id)
     else:
-        runs = []
-        manifests = await ManifestRepository(async_session).list_all()
-        for m in manifests:
-            runs.extend(await repo.list_by_benchmark(m.benchmark_id))
+        runs = await repo.list_all()
     if status:
         runs = [r for r in runs if r.status == status]
     return runs

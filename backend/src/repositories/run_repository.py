@@ -107,3 +107,8 @@ class RunRepositoryImpl(RunRepository):
                 delete(TaskRunModel).where(TaskRunModel.id == _uuid_to_bytes(run_id))
             )
             await session.commit()
+
+    async def list_all(self) -> list[TaskRun]:
+        async with self.session_factory() as session:
+            result = await session.execute(select(TaskRunModel))
+            return [m.to_domain() for m in result.scalars().all()]

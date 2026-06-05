@@ -63,7 +63,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import axios from 'axios'
-const API='http://localhost:8000/coworkeval/v1'; const route=useRoute(); const runId=computed(()=>route.params.runId as string)
+const API='/coworkeval/v1'; const route=useRoute(); const runId=computed(()=>route.params.runId as string)
 const scores=ref<any[]>([]); const dialog=ref(false); const selectedQid=ref(''); const detail=ref<any>(null)
 const avgDims=computed(()=>{
   if(!scores.value.length) return []

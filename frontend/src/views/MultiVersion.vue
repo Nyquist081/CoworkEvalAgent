@@ -40,7 +40,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import axios from 'axios'
-const API='http://localhost:8000/coworkeval/v1'
+const API='/coworkeval/v1'
 const ids=ref(''); const passRates=ref<any[]>([]); const loaded=ref(false)
 async function load(){
   loaded.value=true
