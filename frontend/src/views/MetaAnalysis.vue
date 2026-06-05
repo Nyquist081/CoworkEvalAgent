@@ -42,7 +42,7 @@ const runId = computed(() => route.params.runId as string)
 const passRate = ref<any>(null)
 const issues = ref<any[]>([])
 
-function goBack() { router.push('/') }
+function goBack() { router.push({name:'dashboard'}).catch(()=>{window.location.href='/'}) }
 
 onMounted(async() => {
   try { const r = await axios.get(`${API}/meta/${runId.value}/pass-rate`); passRate.value = r.data } catch(e) { console.error(e) }

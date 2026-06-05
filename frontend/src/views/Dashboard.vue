@@ -126,7 +126,7 @@
         ⚠️ Judge 调用失败: {{ lastResult.judge.error }}
       </div>
 
-      <el-button type="primary" size="small" style="margin-top:12px;" @click="$router.push(`/runs/${lastResult.run_id}`)">
+      <el-button type="primary" size="small" style="margin-top:12px;" @click="goRun(`/runs/${lastResult.run_id}`)">
         查看版本详情 →
       </el-button>
     </el-card>
@@ -137,7 +137,7 @@
       <el-table :data="runs" empty-text="暂无评测记录" size="small" max-height="300">
         <el-table-column label="Run" width="100">
           <template #default="{row}">
-            <el-link type="primary" @click="$router.push(`/runs/${row.id}`)">{{ row.id?.substring(0,8) }}</el-link>
+            <el-link type="primary" @click="goRun(`/runs/${row.id}`)">{{ row.id?.substring(0,8) }}</el-link>
           </template>
         </el-table-column>
         <el-table-column prop="benchmark_id" label="评测集" width="180" />
@@ -161,8 +161,11 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
+
+const router = useRouter()
 
 const API = '/coworkeval/v1'
 
@@ -318,6 +321,8 @@ async function runEval() {
     running.value = false
   }
 }
+
+function goRun(id: string) { router.push(`/runs/${id}`).catch(()=>{window.location.href=`/runs/${id}`}) }
 
 async function deleteRun(runId: string) {
   try {

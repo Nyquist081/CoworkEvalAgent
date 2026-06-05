@@ -18,5 +18,5 @@
 import { useRoute, useRouter } from 'vue-router'
 const route = useRoute()
 const router = useRouter()
-function goHome() { router.push('/') }
+function goHome() { router.push({name:'dashboard'}).catch(()=>{window.location.href='/'}) }
 </script>

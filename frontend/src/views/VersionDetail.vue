@@ -86,7 +86,7 @@ const avgDims = computed(() => {
   ]
 })
 
-function goBack() { router.push('/') }
+function goBack() { router.push({name:'dashboard'}).catch(()=>{window.location.href='/'}) }
 
 async function load() {
   try { const r = await axios.get(`${API}/runs/${runId.value}/scores`); scores.value = r.data||[] }

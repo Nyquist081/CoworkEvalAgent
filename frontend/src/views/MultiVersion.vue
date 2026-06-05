@@ -47,7 +47,7 @@ const ids = ref('')
 const passRates = ref<any[]>([])
 const loaded = ref(false)
 
-function goBack() { router.push('/') }
+function goBack() { router.push({name:'dashboard'}).catch(()=>{window.location.href='/'}) }
 
 async function load() {
   loaded.value = true
