@@ -81,6 +81,37 @@ async def evaluate_run(
     )
     score = await evaluator.evaluate(run_id=run.id, question=question, trace_data=trace_data)
 
+    # T1: Actually compare output vs reference (ResultComparator)
+    t1_comparison = None
+    if question.reference_files and question.output_dir:
+        from pathlib import Path
+        sample_base = Path("sample_data")
+        for ref_file in question.reference_files:
+            ref_path = sample_base / ref_file
+            # Try to find corresponding output
+            out_path = sample_base / question.output_dir
+            if out_path.exists():
+                candidates = list(out_path.glob("*.xlsx"))
+                if candidates:
+                    t1_obj_score = evaluator.comparator.compare(
+                        output_path=str(candidates[0]),
+                        reference_path=str(ref_path),
+                        eval_config=question.eval_config,
+                    )
+                    t1_comparison = {
+                        "reference": str(ref_file),
+                        "output": str(candidates[0].relative_to(sample_base)),
+                        "score": round(t1_obj_score, 1),
+                        "note": "Pandas DataFrame 逐行逐列比对" if t1_obj_score > 0 else "输出与参考答案不匹配",
+                    }
+                    # Override T1 baseline_only with actual comparison
+                    score.t1_baseline_only = t1_obj_score
+                    if not judge_enabled:
+                        score.t1_completion = t1_obj_score
+                    break
+        if not t1_comparison:
+            t1_comparison = {"note": "未找到输出文件，无法比对"}
+
     # Judge evaluation (if enabled)
     judge_result = None
     if judge_enabled:
@@ -144,6 +175,7 @@ async def evaluate_run(
             "c_cost": score.c_cost,
             "overall_score": score.overall_score,
         },
+        "t1_comparison": t1_comparison,
         "judge": judge_result,
     }
 

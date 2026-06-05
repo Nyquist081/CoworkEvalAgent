@@ -72,6 +72,16 @@
         <el-tag size="small" style="margin-left:4px;" v-if="lastResult.skills">Skill: {{ lastResult.skills }}</el-tag>
       </template>
 
+      <!-- T1 Comparison -->
+      <el-alert v-if="lastResult.t1_comparison" :title="t1Title" :type="t1Type" :closable="false" show-icon style="margin-bottom:12px;">
+        <template v-if="lastResult.t1_comparison.score != null">
+          输出 vs 参考答案: <b>{{ lastResult.t1_comparison.score }}/100</b> — {{ lastResult.t1_comparison.note }}
+        </template>
+        <template v-else>
+          {{ lastResult.t1_comparison.note }}
+        </template>
+      </el-alert>
+
       <!-- Baseline vs Actual -->
       <el-table :data="compareRows" size="small" border>
         <el-table-column prop="metric" label="指标" width="120" />
@@ -177,6 +187,19 @@ const form = reactive({
 const canRun = computed(() => form.benchmark_id && form.question_id && form.traceFile)
 
 const selectedQuestion = computed(() => questions.value.find((q:any) => q.question_id === form.question_id))
+
+const t1Type = computed(() => {
+  const c = lastResult.value?.t1_comparison
+  if (!c) return 'info'
+  if (c.score == null) return 'warning'
+  return c.score >= 80 ? 'success' : c.score >= 60 ? 'warning' : 'error'
+})
+const t1Title = computed(() => {
+  const c = lastResult.value?.t1_comparison
+  if (!c) return ''
+  if (c.score == null) return '⚠️ T1 任务完成度: 无法验证输出'
+  return `T1 任务完成度: ${c.score >= 80 ? '通过' : c.score >= 60 ? '部分通过' : '未通过'}`
+})
 
 const compareRows = computed(() => {
   if (!lastResult.value) return []
