@@ -1,36 +1,193 @@
 {
-  "benchmark_id": "sample_bench_001",
-  "name": "Sample Evaluation Benchmark",
+  "benchmark_id": "telecom_bench_2026Q2",
+  "name": "电信行业评测集 2026Q2",
   "version": "1.0.0",
   "created_at": "2026-06-05T00:00:00+08:00",
-  "created_by": "system",
-  "description": "Sample benchmark for integration testing",
-  "total_questions": 1,
+  "created_by": "eval-platform",
+  "description": "通信行业端到端Agent评测集，覆盖经营分析、告警分析、基站规划、PR检查、网络性能、资源优化6大场景",
+  "total_questions": 6,
   "questions": [
     {
-      "question_id": "sample-q-001",
-      "question_name": "Sample Excel Analysis Task",
+      "question_id": "project_business_analysis-0001",
+      "question_name": "5G核心网项目经营分析",
       "category": "Excel",
       "difficulty": "中等",
-      "prompt_file": "sample-q-001/prompt.txt",
-      "input_files": ["sample-q-001/input/data.xlsx"],
-      "reference_files": ["sample-q-001/reference/answer.xlsx"],
-      "output_dir": "sample-q-001/output/",
+      "prompt_file": "project_business_analysis-0001/prompt.txt",
+      "input_files": [
+        "project_business_analysis-0001/输入文件/损益表_PSP_RMB.xlsx"
+      ],
+      "reference_files": [
+        "project_business_analysis-0001/参考答案/损益表_answer.xlsx"
+      ],
+      "output_dir": "project_business_analysis-0001/输出结果/",
       "eval_config": {
         "compare_style": false,
         "ignore_rules": [
-          {"type": "column", "sheet": "Sheet1", "columns": ["K"]}
+          {
+            "type": "column",
+            "sheet": "Sheet1",
+            "columns": [
+              "K"
+            ]
+          }
         ],
         "fatal_rules": []
       },
       "scene": "skills",
       "skills": "project_business_analysis",
-      "payload_size_kb": 128.0,
+      "payload_size_kb": 15.2,
       "baseline_tokens": 693592,
       "baseline_rounds": 19,
       "baseline_tool_count": 17,
       "baseline_time_ms": 64000,
       "baseline_cost_usd": 3.58
+    },
+    {
+      "question_id": "alarm_analysis-0003",
+      "question_name": "告警日志汇总分析",
+      "category": "日志分析",
+      "difficulty": "中等",
+      "prompt_file": "alarm_analysis-0003/prompt.txt",
+      "input_files": [
+        "alarm_analysis-0003/输入文件/告警日志_20260601.xlsx"
+      ],
+      "reference_files": [
+        "alarm_analysis-0003/参考答案/告警汇总_answer.xlsx"
+      ],
+      "output_dir": "alarm_analysis-0003/输出结果/",
+      "eval_config": {
+        "compare_style": false,
+        "ignore_rules": [],
+        "fatal_rules": []
+      },
+      "scene": "skills",
+      "skills": "alarm_analysis",
+      "payload_size_kb": 25.8,
+      "baseline_tokens": 450000,
+      "baseline_rounds": 12,
+      "baseline_tool_count": 14,
+      "baseline_time_ms": 45000,
+      "baseline_cost_usd": 2.2
+    },
+    {
+      "question_id": "site_planning-0005",
+      "question_name": "基站扩容规划",
+      "category": "规划分析",
+      "difficulty": "困难",
+      "prompt_file": "site_planning-0005/prompt.txt",
+      "input_files": [
+        "site_planning-0005/输入文件/基站覆盖数据.xlsx"
+      ],
+      "reference_files": [
+        "site_planning-0005/参考答案/基站规划_answer.xlsx"
+      ],
+      "output_dir": "site_planning-0005/输出结果/",
+      "eval_config": {
+        "compare_style": false,
+        "ignore_rules": [],
+        "fatal_rules": []
+      },
+      "scene": "skills",
+      "skills": "site_planning",
+      "payload_size_kb": 8.5,
+      "baseline_tokens": 580000,
+      "baseline_rounds": 16,
+      "baseline_tool_count": 19,
+      "baseline_time_ms": 55000,
+      "baseline_cost_usd": 2.9
+    },
+    {
+      "question_id": "pr_checker-0007",
+      "question_name": "PR合规检查",
+      "category": "合规审计",
+      "difficulty": "中等",
+      "prompt_file": "pr_checker-0007/prompt.txt",
+      "input_files": [
+        "pr_checker-0007/输入文件/PR列表_20260601.xlsx"
+      ],
+      "reference_files": [
+        "pr_checker-0007/参考答案/PR检查_answer.xlsx"
+      ],
+      "output_dir": "pr_checker-0007/输出结果/",
+      "eval_config": {
+        "compare_style": false,
+        "ignore_rules": [],
+        "fatal_rules": [
+          {
+            "rule_id": "FR-001",
+            "description": "禁止跳过回滚方案检查直接通过高风险PR",
+            "dimension": "task_completion"
+          }
+        ]
+      },
+      "scene": "skills",
+      "skills": "pr_checker",
+      "payload_size_kb": 5.2,
+      "baseline_tokens": 320000,
+      "baseline_rounds": 8,
+      "baseline_tool_count": 10,
+      "baseline_time_ms": 28000,
+      "baseline_cost_usd": 1.6
+    },
+    {
+      "question_id": "network_perf-0010",
+      "question_name": "网络性能区域分析",
+      "category": "性能分析",
+      "difficulty": "中等",
+      "prompt_file": "network_perf-0010/prompt.txt",
+      "input_files": [
+        "network_perf-0010/输入文件/网络性能指标_20260601.xlsx"
+      ],
+      "reference_files": [
+        "network_perf-0010/参考答案/网络性能_answer.xlsx"
+      ],
+      "output_dir": "network_perf-0010/输出结果/",
+      "eval_config": {
+        "compare_style": false,
+        "ignore_rules": [],
+        "fatal_rules": []
+      },
+      "scene": "skills",
+      "skills": "network_perf",
+      "payload_size_kb": 18.3,
+      "baseline_tokens": 510000,
+      "baseline_rounds": 14,
+      "baseline_tool_count": 15,
+      "baseline_time_ms": 50000,
+      "baseline_cost_usd": 2.55
+    },
+    {
+      "question_id": "idle_resource-0012",
+      "question_name": "空闲资源识别与优化",
+      "category": "资源优化",
+      "difficulty": "困难",
+      "prompt_file": "idle_resource-0012/prompt.txt",
+      "input_files": [
+        "idle_resource-0012/输入文件/资源利用率_20260601.xlsx"
+      ],
+      "reference_files": [
+        "idle_resource-0012/参考答案/空闲资源_answer.xlsx"
+      ],
+      "output_dir": "idle_resource-0012/输出结果/",
+      "eval_config": {
+        "compare_style": false,
+        "ignore_rules": [],
+        "fatal_rules": [
+          {
+            "rule_id": "FR-002",
+            "description": "禁止建议释放标记为'生产关键'的资源",
+            "dimension": "tool_accuracy"
+          }
+        ]
+      },
+      "scene": "skills",
+      "skills": "idle_resource",
+      "payload_size_kb": 22.7,
+      "baseline_tokens": 680000,
+      "baseline_rounds": 18,
+      "baseline_tool_count": 22,
+      "baseline_time_ms": 60000,
+      "baseline_cost_usd": 3.4
     }
   ]
 }
