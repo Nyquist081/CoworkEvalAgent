@@ -67,9 +67,23 @@
     <!-- Result -->
     <el-card v-if="lastResult" style="border:2px solid #409eff;margin-bottom:16px;">
       <template #header>
-        <b>📋 评测结果 — {{ lastResult.question_id }}</b>
-        <el-tag size="small" style="margin-left:8px;" type="success">Run: {{ lastResult.run_id?.substring(0,8) }}</el-tag>
+        <b>📋 {{ lastResult.question_name || lastResult.question_id }}</b>
+        <el-tag size="small" style="margin-left:8px;" type="info">{{ lastResult.difficulty }}</el-tag>
+        <el-tag size="small" style="margin-left:4px;" v-if="lastResult.skills">Skill: {{ lastResult.skills }}</el-tag>
       </template>
+
+      <!-- Baseline vs Actual -->
+      <el-table :data="compareRows" size="small" border>
+        <el-table-column prop="metric" label="指标" width="120" />
+        <el-table-column prop="baseline" label="Baseline (基准)" width="150" />
+        <el-table-column prop="actual" label="实际" width="150" />
+        <el-table-column prop="delta" label="偏差" width="100">
+          <template #default="{row}"><span :style="{color:row.bad?'#f56c6c':'#67c23a'}">{{ row.delta }}</span></template>
+        </el-table-column>
+      </el-table>
+
+      <el-divider />
+      <!-- TTTEC Scores -->
       <el-row :gutter="12">
         <el-col :span="4" v-for="d in scoreDims" :key="d.key">
           <div style="text-align:center;padding:8px;">
@@ -78,15 +92,30 @@
           </div>
         </el-col>
       </el-row>
-      <el-divider />
-      <el-descriptions :column="3" size="small" border>
-        <el-descriptions-item label="工具调用">{{ lastResult.metrics?.tool_calls }}</el-descriptions-item>
-        <el-descriptions-item label="成功">{{ lastResult.metrics?.success_calls }}</el-descriptions-item>
-        <el-descriptions-item label="Token">{{ lastResult.metrics?.tokens?.toLocaleString() }}</el-descriptions-item>
-        <el-descriptions-item label="轮次">{{ lastResult.metrics?.rounds }}</el-descriptions-item>
-        <el-descriptions-item label="耗时">{{ lastResult.metrics?.duration_ms }}ms</el-descriptions-item>
-        <el-descriptions-item label="成本">${{ lastResult.metrics?.cost_usd }}</el-descriptions-item>
-      </el-descriptions>
+
+      <!-- Judge Result -->
+      <el-divider v-if="lastResult.judge && !lastResult.judge.error" />
+      <div v-if="lastResult.judge && !lastResult.judge.error">
+        <div style="font-weight:bold;margin-bottom:8px;">🧠 Judge 裁判模型评分 (DeepSeek)</div>
+        <el-row :gutter="12">
+          <el-col :span="6" v-for="jd in judgeDims" :key="jd.key">
+            <el-card shadow="hover" :body-style="{padding:'8px',textAlign:'center'}">
+              <div style="font-size:22px;font-weight:bold;" :style="{color:jd.color}">{{ jd.val }}</div>
+              <div style="font-size:10px;color:#999;">{{ jd.label }}</div>
+            </el-card>
+          </el-col>
+        </el-row>
+        <div style="margin-top:8px;color:#666;font-size:13px;" v-if="lastResult.judge.conclusion">
+          💬 {{ lastResult.judge.conclusion?.substring(0, 200) }}
+        </div>
+        <div v-if="lastResult.judge.skill_compliance" style="margin-top:4px;font-size:12px;color:#999;">
+          Skill合规: {{ lastResult.judge.skill_compliance.score }}/100
+        </div>
+      </div>
+      <div v-if="lastResult.judge?.error" style="color:#f56c6c;font-size:12px;">
+        ⚠️ Judge 调用失败: {{ lastResult.judge.error }}
+      </div>
+
       <el-button type="primary" size="small" style="margin-top:12px;" @click="$router.push(`/runs/${lastResult.run_id}`)">
         查看版本详情 →
       </el-button>
@@ -148,6 +177,38 @@ const form = reactive({
 const canRun = computed(() => form.benchmark_id && form.question_id && form.traceFile)
 
 const selectedQuestion = computed(() => questions.value.find((q:any) => q.question_id === form.question_id))
+
+const compareRows = computed(() => {
+  if (!lastResult.value) return []
+  const b = lastResult.value.baseline || {}
+  const a = lastResult.value.actual || {}
+  const fmt = (v: any) => typeof v === 'number' ? v.toLocaleString() : String(v??'-')
+  const pct = (bv: number, av: number) => bv ? `${((av-bv)/bv*100).toFixed(0)}%` : '-'
+  return [
+    {metric:'工具调用',baseline:fmt(b.tool_count),actual:fmt(a.tool_calls),
+     delta:pct(b.tool_count,a.tool_calls),bad:(a.tool_calls??0)>(b.tool_count??0)},
+    {metric:'Token',baseline:fmt(b.tokens),actual:fmt(a.tokens),
+     delta:pct(b.tokens,a.tokens),bad:(a.tokens??0)>(b.tokens??0)},
+    {metric:'轮次',baseline:fmt(b.rounds),actual:fmt(a.rounds),
+     delta:pct(b.rounds,a.rounds),bad:(a.rounds??0)>(b.rounds??0)},
+    {metric:'耗时',baseline:fmt(b.time_ms)+'ms',actual:fmt(a.duration_ms)+'ms',
+     delta:pct(b.time_ms,a.duration_ms),bad:(a.duration_ms??0)>(b.time_ms??0)},
+    {metric:'成本',baseline:'$'+fmt(b.cost_usd),actual:'$'+fmt(a.cost_usd),
+     delta:pct(b.cost_usd,a.cost_usd),bad:(a.cost_usd??0)>(b.cost_usd??0)},
+  ]
+})
+
+const judgeDims = computed(() => {
+  if (!lastResult.value?.judge) return []
+  const j = lastResult.value.judge
+  if (j.error) return []
+  return [
+    {key:'eff',label:'执行效率',val:j.execution_efficiency,color:'#e6a23c'},
+    {key:'tool',label:'工具准确性',val:j.tool_accuracy,color:'#409eff'},
+    {key:'think',label:'思考效率',val:j.thinking_efficiency,color:'#67c23a'},
+    {key:'task',label:'任务完成度',val:j.task_completion,color:'#f56c6c'},
+  ]
+})
 
 const scoreDims = computed(() => {
   if (!lastResult.value?.scores) return []

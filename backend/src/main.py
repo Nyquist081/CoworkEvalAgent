@@ -12,6 +12,13 @@ from src.repositories.manifest_repository import ManifestRepository
 from src.core.schemas import Manifest
 
 
+# Import all models so Base.metadata knows about them
+import src.repositories.run_repository  # noqa
+import src.repositories.score_repository  # noqa
+import src.repositories.judge_result_repository  # noqa
+import src.repositories.manifest_repository  # noqa
+
+
 async def seed_sample_data():
     """Auto-load sample manifest on startup if DB is empty."""
     repo = ManifestRepository(async_session)
