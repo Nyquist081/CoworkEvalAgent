@@ -1,0 +1,4 @@
+{"type":"session_start","model":"Claude-4-Sonnet","user_question":"Analyze logs..."}
+{"type":"tool_call","tool_name":"Glob","tool_input":{"pattern":"**/*.log"}}
+{"type":"tool_result","tool_result":"found 0 files","tool_error":false}
+{"type":"assistant","thinking":"No log files found...","text":"I cannot find any log files."}

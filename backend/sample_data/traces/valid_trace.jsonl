@@ -1,0 +1,11 @@
+{"type":"session_start","model":"Claude-4-Sonnet","user_question":"Analyze alerts..."}
+{"type":"tool_call","tool_name":"Glob","tool_input":{"pattern":"**/*.xlsx"}}
+{"type":"tool_result","tool_result":"found 3 files","tool_error":false}
+{"type":"assistant","thinking":"Need to understand data structure...","text":"Let me analyze..."}
+{"type":"tool_call","tool_name":"Read","tool_input":{"path":"data.xlsx"}}
+{"type":"tool_result","tool_result":"[file content]","tool_error":false}
+{"type":"assistant","thinking":"Data has 3 columns...","text":"Structure is clear..."}
+{"type":"tool_call","tool_name":"Shell","tool_input":{"command":"python analyze.py"}}
+{"type":"tool_result","tool_result":"Error: KeyError","tool_error":true}
+{"type":"assistant","thinking":"Column name is wrong...","text":"Fixing..."}
+{"type":"result","status":"success","duration_ms":432220,"input_tokens":488250,"output_tokens":3447,"cost_usd":3.62}
