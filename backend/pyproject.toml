@@ -13,7 +13,11 @@ dependencies = [
     "pandas>=2.0",
     "openpyxl>=3.1.0",
     "websockets>=12.0",
+    "click>=8.4.1",
 ]
+
+[project.scripts]
+coworkeval = "src.cli:cli"
 
 [project.optional-dependencies]
 dev = [
