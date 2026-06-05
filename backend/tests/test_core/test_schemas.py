@@ -67,3 +67,19 @@ def test_task_run_status_enum():
     ]
     for i in range(len(valid_order) - 1):
         assert valid_order[i] != valid_order[i + 1]
+
+
+def test_base_evaluator_is_abstract():
+    from src.core.interfaces import BaseEvaluator
+    with pytest.raises(TypeError):
+        BaseEvaluator()  # Cannot instantiate ABC directly
+
+
+def test_concrete_evaluator_must_implement_evaluate():
+    from src.core.interfaces import BaseEvaluator
+
+    class BadEvaluator(BaseEvaluator):
+        pass  # Missing evaluate method
+
+    with pytest.raises(TypeError):
+        BadEvaluator()
