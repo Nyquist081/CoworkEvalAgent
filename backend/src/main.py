@@ -1,23 +1,43 @@
 from __future__ import annotations
+import json
 from contextlib import asynccontextmanager
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.api.router import api_router
 from src.api.websocket import router as ws_router
-from src.infrastructure.database import init_db
+from src.infrastructure.database import init_db, async_session
+from src.repositories.manifest_repository import ManifestRepository
+from src.core.schemas import Manifest
+
+
+async def seed_sample_data():
+    """Auto-load sample manifest on startup if DB is empty."""
+    repo = ManifestRepository(async_session)
+    existing = await repo.list_all()
+    if existing:
+        return
+
+    manifest_path = Path(__file__).parent.parent / "sample_data" / "manifest.json"
+    if manifest_path.exists():
+        data = json.loads(manifest_path.read_text())
+        manifest = Manifest.model_validate(data)
+        await repo.save(manifest)
+        print(f"✅ Auto-loaded sample manifest: {manifest.benchmark_id} ({manifest.total_questions} questions)")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await init_db()
+    await seed_sample_data()
     yield
 
 
 app = FastAPI(
     title="CoworkEval",
-    description="Agent Evaluation Harness API",
-    version="0.1.0",
+    description="Agent Evaluation Harness — upload traces, get TTTEC scores, compare versions",
+    version="0.2.0",
     lifespan=lifespan,
 )
 
@@ -36,8 +56,3 @@ app.include_router(ws_router)
 @app.get("/health")
 async def health():
     return {"status": "ok"}
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("src.main:app", host="0.0.0.0", port=8000, reload=True)
