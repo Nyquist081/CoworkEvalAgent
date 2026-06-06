@@ -2,9 +2,33 @@
   <div>
     <h1>📊 CoworkEval 评测平台</h1>
 
+    <el-card style="margin-bottom:16px;">
+      <template #header><b>① 评测模式</b></template>
+      <el-radio-group v-model="form.mode">
+        <el-radio-button label="offline">离线 Run Bundle</el-radio-button>
+        <el-radio-button label="single">单 Trace 调试</el-radio-button>
+      </el-radio-group>
+    </el-card>
+
+    <el-card v-if="form.mode === 'offline'" style="margin-bottom:16px;">
+      <template #header><b>② 离线目录</b></template>
+      <el-row :gutter="12">
+        <el-col :span="14">
+          <el-input v-model="form.benchmarkRoot" placeholder="../evaluations/industrial-demo">
+            <template #prepend>benchmark_root</template>
+          </el-input>
+        </el-col>
+        <el-col :span="10">
+          <el-input v-model="form.runLabel" placeholder="alarm-with-skill">
+            <template #prepend>run_label</template>
+          </el-input>
+        </el-col>
+      </el-row>
+    </el-card>
+
     <!-- Step 1: Manifest -->
-    <el-card style="margin-bottom: 16px;">
-      <template #header><b>① 评测集</b></template>
+    <el-card v-if="form.mode === 'single'" style="margin-bottom: 16px;">
+      <template #header><b>② 评测集</b></template>
       <el-row :gutter="12" align="middle">
         <el-col :span="12">
           <el-select v-model="form.benchmark_id" placeholder="选择评测集" @change="onBenchmarkChange" style="width:100%" :loading="loading.manifests" clearable>
@@ -21,8 +45,8 @@
     </el-card>
 
     <!-- Step 2: Question -->
-    <el-card style="margin-bottom:16px;">
-      <template #header><b>② 题目</b> <span style="color:#999;font-weight:400;">(需先选评测集)</span></template>
+    <el-card v-if="form.mode === 'single'" style="margin-bottom:16px;">
+      <template #header><b>③ 题目</b> <span style="color:#999;font-weight:400;">(需先选评测集)</span></template>
       <el-select v-model="form.question_id" placeholder="选择题号" style="width:100%;" :disabled="!form.benchmark_id">
         <el-option v-for="q in questions" :key="q.question_id"
           :label="`${q.question_id} — ${q.question_name} [${q.difficulty}] Skill: ${q.skills || '无'}`"
@@ -35,8 +59,8 @@
     </el-card>
 
     <!-- Step 3: Trace -->
-    <el-card style="margin-bottom:16px;">
-      <template #header><b>③ Trace 文件</b> <span style="color:#999;font-weight:400;">(.jsonl 格式)</span></template>
+    <el-card v-if="form.mode === 'single'" style="margin-bottom:16px;">
+      <template #header><b>④ Trace 文件</b> <span style="color:#999;font-weight:400;">(.jsonl 格式)</span></template>
       <input type="file" accept=".jsonl" @change="(e:any)=>{form.traceFile=e.target?.files?.[0]||null; form.traceName=e.target?.files?.[0]?.name||''}" ref="trRef" style="display:none" />
       <el-row :gutter="12" align="middle">
         <el-col :span="8">
@@ -54,7 +78,7 @@
       <el-row align="middle">
         <el-col :span="12">
           <el-button type="primary" size="large" @click="runEval" :loading="running" :disabled="!canRun">
-            🚀 开始评测
+            开始评测
           </el-button>
           <el-checkbox v-model="form.useJudge" style="margin-left:12px;">启用裁判模型 (DeepSeek)</el-checkbox>
         </el-col>
@@ -67,9 +91,10 @@
     <!-- Result -->
     <el-card v-if="lastResult" style="border:2px solid #409eff;margin-bottom:16px;">
       <template #header>
-        <b>📋 {{ lastResult.question_name || lastResult.question_id }}</b>
+        <b>📋 {{ lastResult.run_label || lastResult.question_name || lastResult.question_id }}</b>
         <el-tag size="small" style="margin-left:8px;" type="info">{{ lastResult.difficulty }}</el-tag>
         <el-tag size="small" style="margin-left:4px;" v-if="lastResult.skills">Skill: {{ lastResult.skills }}</el-tag>
+        <el-tag size="small" style="margin-left:4px;" v-if="lastResult.score_count != null">Scores: {{ lastResult.score_count }}</el-tag>
       </template>
 
       <!-- T1 Comparison -->
@@ -126,7 +151,7 @@
         ⚠️ Judge 调用失败: {{ lastResult.judge.error }}
       </div>
 
-      <el-button type="primary" size="small" style="margin-top:12px;" @click="goRun(`/runs/${lastResult.run_id}`)">
+      <el-button type="primary" size="small" style="margin-top:12px;" @click="goRun(lastResult.run_id)">
         查看版本详情 →
       </el-button>
     </el-card>
@@ -137,7 +162,20 @@
       <el-table :data="runs" empty-text="暂无评测记录" size="small" max-height="300">
         <el-table-column label="Run" width="100">
           <template #default="{row}">
-            <el-link type="primary" @click="goRun(`/runs/${row.id}`)">{{ row.id?.substring(0,8) }}</el-link>
+            <el-link type="primary" @click="goRun(row.id)">{{ row.id?.substring(0,8) }}</el-link>
+          </template>
+        </el-table-column>
+        <el-table-column prop="run_label" label="版本" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="agent_name" label="Agent" width="120" show-overflow-tooltip />
+        <el-table-column prop="model" label="模型" width="120" show-overflow-tooltip />
+        <el-table-column label="来源" width="100">
+          <template #default="{row}">
+            <el-tag size="small" type="info">{{ row.source || '-' }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="Trace" width="100">
+          <template #default="{row}">
+            <el-tag size="small" :type="row.trace_quality==='degraded'?'warning':'success'">{{ row.trace_quality || '-' }}</el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="benchmark_id" label="评测集" width="180" />
@@ -180,6 +218,9 @@ const loading = reactive({ manifests: false, uploadManifest: false })
 const error = reactive({ manifests: '', eval: '' })
 
 const form = reactive({
+  mode: 'offline',
+  benchmarkRoot: '../evaluations/industrial-demo',
+  runLabel: 'alarm-with-skill',
   benchmark_id: '',
   question_id: '',
   traceFile: null as File | null,
@@ -187,7 +228,10 @@ const form = reactive({
   useJudge: false,
 })
 
-const canRun = computed(() => form.benchmark_id && form.question_id && form.traceFile)
+const canRun = computed(() => {
+  if (form.mode === 'offline') return form.benchmarkRoot && form.runLabel
+  return form.benchmark_id && form.question_id && form.traceFile
+})
 
 const selectedQuestion = computed(() => questions.value.find((q:any) => q.question_id === form.question_id))
 
@@ -305,6 +349,18 @@ async function runEval() {
   error.eval = ''
   lastResult.value = null
   try {
+    if (form.mode === 'offline') {
+      const res = await axios.post(`${API}/runs/evaluate-offline`, {
+        benchmark_root: form.benchmarkRoot,
+        run_label: form.runLabel,
+        judge_enabled: form.useJudge,
+      })
+      lastResult.value = res.data
+      ElMessage.success(`离线评测完成，生成 ${res.data.score_count} 条评分`)
+      await loadData()
+      return
+    }
+
     const fd = new FormData()
     fd.append('benchmark_id', form.benchmark_id)
     fd.append('question_id', form.question_id)

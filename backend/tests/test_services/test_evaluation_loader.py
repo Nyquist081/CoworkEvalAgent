@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timezone
 
 import pytest
+from pathlib import Path
 
 from src.core.schemas import RunSource, TraceQuality
 from src.services.evaluation_loader import EvaluationLoader
@@ -126,3 +127,16 @@ def test_simplified_question_directory_is_attempt_one(tmp_path):
 
     assert bundle.inputs[0].attempt_index == 1
     assert bundle.inputs[0].trace_path == run / "trace.jsonl"
+
+
+def test_repository_industrial_demo_uses_run_bundle_layout():
+    root = Path(__file__).resolve().parents[3] / "evaluations" / "industrial-demo"
+
+    bundle = EvaluationLoader(root).load_run("alarm-with-skill")
+
+    assert bundle.manifest.benchmark_id == "industrial-demo"
+    assert bundle.run_metadata.run_label == "alarm-with-skill"
+    assert bundle.inputs[0].trace_path == (
+        root / "runs" / "alarm-with-skill" / "alarm_analysis-0003" / "attempt-1" / "trace.jsonl"
+    )
+    assert bundle.inputs[0].output_dir.name == "输出结果"

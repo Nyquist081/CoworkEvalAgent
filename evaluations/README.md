@@ -26,17 +26,36 @@ cd backend
 # 访问 http://localhost:8000/docs 查看 API
 ```
 
-## 目录结构
+## 新离线评测目录结构
 
 ```
 evaluations/
-├── baselines/          ← 存放 Baseline Trace（无 Skill 执行）
-├── traces/             ← 存放实测 Trace（有 Skill 或其他版本）
-├── results/            ← 评测结果输出
-└── SKILL.md            ← 示例 Skill 文件
+└── <benchmark_id>/
+    ├── manifest.json
+    ├── <question_id>/
+    │   ├── prompt.txt
+    │   ├── 输入文件/
+    │   └── 参考答案/
+    └── runs/
+        └── <run_label>/
+            ├── run_meta.json
+            └── <question_id>/
+                └── attempt-1/
+                    ├── trace.jsonl
+                    └── 输出结果/
 ```
 
-## 工作流
+可直接试跑的样例：
+
+```bash
+curl -X POST http://localhost:8000/coworkeval/v1/runs/evaluate-offline \
+  -H 'Content-Type: application/json' \
+  -d '{"benchmark_root":"../evaluations/industrial-demo","run_label":"alarm-with-skill","judge_enabled":false}'
+```
+
+## 旧 Trace 对比工作流
+
+旧的 `baselines/` 和 `traces/` 目录仍保留，用于单 Trace A/B 对比：
 
 ```
 1. 无 Skill 执行任务 → 保存 Trace 到 baselines/

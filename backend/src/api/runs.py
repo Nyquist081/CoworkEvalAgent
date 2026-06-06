@@ -1,7 +1,8 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
+from pathlib import Path
 from uuid import UUID
-from src.core.schemas import TaskRun, RunStatus, Manifest
+from src.core.schemas import EvaluationInput, TaskRun, RunStatus, Manifest
 from src.repositories.run_repository import RunRepositoryImpl
 from src.repositories.manifest_repository import ManifestRepository
 from src.infrastructure.database import async_session
@@ -22,6 +23,69 @@ class OfflineEvaluateRequest(BaseModel):
     benchmark_root: str
     run_label: str
     judge_enabled: bool = False
+
+
+def _sample_data_root() -> Path:
+    for candidate in (Path("backend/sample_data"), Path("sample_data")):
+        if candidate.exists():
+            return candidate
+    return Path("backend/sample_data")
+
+
+def _build_single_trace_input(question) -> EvaluationInput:
+    sample_base = _sample_data_root()
+    return EvaluationInput(
+        question=question,
+        trace_path=Path("uploaded-trace.jsonl"),
+        output_dir=sample_base / question.output_dir,
+        reference_paths=[sample_base / ref for ref in question.reference_files],
+        attempt_index=1,
+    )
+
+
+def _build_t1_comparison(evaluation_input: EvaluationInput, score) -> dict | None:
+    if not evaluation_input.reference_paths:
+        return None
+    output_dir = evaluation_input.output_dir
+    if not output_dir.exists():
+        return {"note": "未找到输出文件，无法比对"}
+
+    candidates = sorted(output_dir.glob("*.xlsx"))
+    if not candidates:
+        return {"note": "未找到输出文件，无法比对"}
+
+    sample_base = _sample_data_root()
+    output = candidates[0]
+    reference = evaluation_input.reference_paths[0]
+    return {
+        "reference": str(reference.relative_to(sample_base)) if reference.is_relative_to(sample_base) else str(reference),
+        "output": str(output.relative_to(sample_base)) if output.is_relative_to(sample_base) else str(output),
+        "score": round(score.t1_baseline_only or 0.0, 1),
+        "note": "Pandas DataFrame 逐行逐列比对" if (score.t1_baseline_only or 0) > 0 else "输出与参考答案不匹配",
+    }
+
+
+async def _load_judge_payload(pipeline: PipelineRunner, run_id: UUID, question_id: str) -> dict | None:
+    judge_repo = getattr(pipeline, "judge_repo", None)
+    if judge_repo is None:
+        return None
+    judge_result = await judge_repo.get_by_run_and_question(run_id, question_id)
+    if judge_result is None:
+        return None
+    return {
+        "execution_efficiency": judge_result.execution_efficiency,
+        "tool_accuracy": judge_result.tool_accuracy,
+        "thinking_efficiency": judge_result.thinking_efficiency,
+        "task_completion": judge_result.task_completion,
+        "conclusion": judge_result.conclusion,
+        "skill_compliance": (
+            judge_result.skill_compliance.model_dump()
+            if judge_result.skill_compliance else None
+        ),
+        "fatal_violations": [
+            violation.model_dump() for violation in judge_result.fatal_violations
+        ],
+    }
 
 
 def _run_repo():
@@ -89,7 +153,6 @@ async def evaluate_run(
     judge_enabled: bool = Form(False),
 ):
     """Upload a trace file + manifest, run evaluation, return scores."""
-    import json, asyncio
     from src.infrastructure.trace_parser import TraceParser
 
     # Load manifest
@@ -117,76 +180,15 @@ async def evaluate_run(
     pipeline = _build_pipeline()
     run = await pipeline.create_run(manifest, judge_enabled=judge_enabled)
 
-    # Baseline evaluation
-    evaluator = BaselineEvaluator(
-        score_repo=ScoreRepositoryImpl(async_session),
-        comparator=ResultComparator(),
+    evaluation_input = _build_single_trace_input(question)
+    score = await pipeline.execute_single_input(
+        run.id,
+        evaluation_input,
+        trace_data,
+        judge_enabled=judge_enabled,
     )
-    score = await evaluator.evaluate(run_id=run.id, question=question, trace_data=trace_data)
-
-    # T1: Actually compare output vs reference (ResultComparator)
-    t1_comparison = None
-    if question.reference_files and question.output_dir:
-        from pathlib import Path
-        sample_base = Path("sample_data")
-        for ref_file in question.reference_files:
-            ref_path = sample_base / ref_file
-            # Try to find corresponding output
-            out_path = sample_base / question.output_dir
-            if out_path.exists():
-                candidates = list(out_path.glob("*.xlsx"))
-                if candidates:
-                    t1_obj_score = evaluator.comparator.compare(
-                        output_path=str(candidates[0]),
-                        reference_path=str(ref_path),
-                        eval_config=question.eval_config,
-                    )
-                    t1_comparison = {
-                        "reference": str(ref_file),
-                        "output": str(candidates[0].relative_to(sample_base)),
-                        "score": round(t1_obj_score, 1),
-                        "note": "Pandas DataFrame 逐行逐列比对" if t1_obj_score > 0 else "输出与参考答案不匹配",
-                    }
-                    # Override T1 baseline_only with actual comparison
-                    score.t1_baseline_only = t1_obj_score
-                    if not judge_enabled:
-                        score.t1_completion = t1_obj_score
-                    break
-        if not t1_comparison:
-            t1_comparison = {"note": "未找到输出文件，无法比对"}
-
-    # Judge evaluation (if enabled)
-    judge_result = None
-    if judge_enabled:
-        try:
-            from src.infrastructure.llm_gateway import LLMClient
-            from src.services.judge_evaluator import JudgeEvaluator
-            from src.repositories.judge_result_repository import JudgeResultRepositoryImpl
-            from src.services.fusion_service import FusionService
-
-            llm = LLMClient()
-            jrepo = JudgeResultRepositoryImpl(async_session)
-            judge_eval = JudgeEvaluator(judge_repo=jrepo, llm_client=llm)
-            await judge_eval.evaluate(run_id=run.id, question=question, trace_data=trace_data)
-
-            # Get the persisted judge result
-            jr = await jrepo.get_by_run_and_question(run.id, question_id)
-            if jr:
-                judge_result = {
-                    "execution_efficiency": jr.execution_efficiency,
-                    "tool_accuracy": jr.tool_accuracy,
-                    "thinking_efficiency": jr.thinking_efficiency,
-                    "task_completion": jr.task_completion,
-                    "conclusion": jr.conclusion,
-                    "skill_compliance": jr.skill_compliance.model_dump() if jr.skill_compliance else None,
-                    "fatal_violations": [fv.model_dump() for fv in jr.fatal_violations],
-                }
-                # Fuse scores
-                fusion = FusionService()
-                fused = await fusion.fuse(score, jr)
-                score = fused
-        except Exception as e:
-            judge_result = {"error": str(e)}
+    t1_comparison = _build_t1_comparison(evaluation_input, score)
+    judge_result = await _load_judge_payload(pipeline, run.id, question_id) if judge_enabled else None
 
     return {
         "run_id": str(run.id),

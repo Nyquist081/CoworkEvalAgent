@@ -1,0 +1,38 @@
+{
+  "benchmark_id": "industrial-demo",
+  "name": "工业离线评测 Demo",
+  "version": "1.0.0",
+  "created_at": "2026-06-06T00:00:00+08:00",
+  "created_by": "eval-platform",
+  "description": "用于演示 runs/{label}/{qid}/attempt-1 离线评测目录结构的最小工业样例。",
+  "total_questions": 1,
+  "questions": [
+    {
+      "question_id": "alarm_analysis-0003",
+      "question_name": "告警日志汇总分析",
+      "category": "日志分析",
+      "difficulty": "中等",
+      "prompt_file": "alarm_analysis-0003/prompt.txt",
+      "input_files": [
+        "alarm_analysis-0003/输入文件/告警日志_20260601.xlsx"
+      ],
+      "reference_files": [
+        "alarm_analysis-0003/参考答案/告警汇总_answer.xlsx"
+      ],
+      "output_dir": "alarm_analysis-0003/输出结果/",
+      "eval_config": {
+        "compare_style": false,
+        "ignore_rules": [],
+        "fatal_rules": []
+      },
+      "scene": "skills",
+      "skills": "alarm_analysis",
+      "payload_size_kb": 25.8,
+      "baseline_tokens": 450000,
+      "baseline_rounds": 12,
+      "baseline_tool_count": 14,
+      "baseline_time_ms": 45000,
+      "baseline_cost_usd": 2.2
+    }
+  ]
+}

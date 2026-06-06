@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, patch
 
 from fastapi.testclient import TestClient
 
-from src.core.schemas import RunMetadata, ScoreResult, TaskRun
+from src.core.schemas import EvalConfig, Manifest, QuestionItem, RunMetadata, ScoreResult, TaskRun
 from src.main import app
 
 
@@ -48,3 +48,76 @@ def test_evaluate_offline_run_endpoint():
     assert data["run_id"] == str(run.id)
     assert data["run_label"] == "skill-v2"
     assert data["score_count"] == 1
+
+
+def test_evaluate_run_delegates_scoring_to_pipeline():
+    question = QuestionItem(
+        question_id="q-1",
+        question_name="Q1",
+        category="Excel",
+        difficulty="中等",
+        prompt_file="q-1/prompt.txt",
+        output_dir="q-1/输出结果",
+        reference_files=["q-1/参考答案/answer.xlsx"],
+        eval_config=EvalConfig(),
+    )
+    manifest = Manifest(
+        benchmark_id="bench-1",
+        name="bench",
+        version="1.0",
+        created_at="2026-06-06T00:00:00Z",
+        total_questions=1,
+        questions=[question],
+    )
+    run = TaskRun(benchmark_id="bench-1")
+    score = ScoreResult(
+        run_id=run.id,
+        question_id="q-1",
+        actual_tool_calls=1,
+        actual_success_calls=1,
+        actual_tokens=10,
+        actual_rounds=1,
+        actual_time_ms=100,
+        actual_cost_usd=0.01,
+        t1_completion=90.0,
+        t1_baseline_only=90.0,
+        t2_accuracy=100.0,
+        t3_efficiency=100.0,
+        t4_thinking=100.0,
+        e_performance=100.0,
+        c_cost=100.0,
+        overall_score=98.0,
+    )
+
+    with patch("src.api.runs.ManifestRepository") as manifest_repo_cls, patch("src.api.runs._build_pipeline") as build_pipeline:
+        manifest_repo = manifest_repo_cls.return_value
+        manifest_repo.get = AsyncMock(return_value=manifest)
+
+        pipeline = build_pipeline.return_value
+        pipeline.create_run = AsyncMock(return_value=run)
+        pipeline.execute_single_input = AsyncMock(return_value=score)
+        pipeline.judge_repo = None
+
+        response = client.post(
+            "/coworkeval/v1/runs/evaluate",
+            data={
+                "benchmark_id": "bench-1",
+                "question_id": "q-1",
+                "judge_enabled": "true",
+            },
+            files={
+                "trace_file": (
+                    "trace.jsonl",
+                    b'{"type":"result","status":"success"}\n',
+                    "application/jsonl",
+                )
+            },
+        )
+
+    assert response.status_code == 200
+    pipeline.execute_single_input.assert_called_once()
+    _, evaluation_input, trace_data = pipeline.execute_single_input.call_args.args[:3]
+    assert evaluation_input.question_id == "q-1"
+    assert trace_data == [{"type": "result", "status": "success"}]
+    assert pipeline.execute_single_input.call_args.kwargs["judge_enabled"] is True
+    assert response.json()["scores"]["overall_score"] == 98.0

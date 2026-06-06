@@ -95,6 +95,32 @@ async def test_pipeline_failure_sets_failed(mock_run_repo, manifest):
 
 
 @pytest.mark.asyncio
+async def test_load_traces_uses_question_trace_files(mock_run_repo, manifest):
+    parser = AsyncMock()
+    parser.parse = AsyncMock(side_effect=[
+        [{"qid": "q-001"}],
+        [{"qid": "q-002"}],
+    ])
+    runner = PipelineRunner(
+        run_repo=mock_run_repo,
+        baseline_evaluator=AsyncMock(),
+        trace_parser=parser,
+    )
+
+    trace_map = await runner._load_traces(manifest)
+
+    assert trace_map == {
+        "q-001": [{"qid": "q-001"}],
+        "q-002": [{"qid": "q-002"}],
+    }
+    paths = [call.args[0] for call in parser.parse.call_args_list]
+    assert paths == [
+        "backend/sample_data/traces/q-001.jsonl",
+        "backend/sample_data/traces/q-002.jsonl",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_concurrent_question_processing(mock_run_repo):
     import asyncio
     call_order = []

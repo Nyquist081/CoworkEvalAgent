@@ -3,7 +3,15 @@ import asyncio
 import logging
 from uuid import UUID
 
-from src.core.schemas import TaskRun, Manifest, QuestionItem, RunMetadata, RunStatus, ScoreResult
+from src.core.schemas import (
+    EvaluationInput,
+    TaskRun,
+    Manifest,
+    QuestionItem,
+    RunMetadata,
+    RunStatus,
+    ScoreResult,
+)
 from src.core.interfaces import RunRepository, BaseEvaluator
 from src.core.state_machine import StateMachine
 from src.core.exceptions import EvaluationError, IncompleteTraceError
@@ -32,6 +40,7 @@ class PipelineRunner:
         fusion_service=None,
         judge_repo=None,
         judge_concurrency: int = 5,
+        trace_parser: TraceParser | None = None,
     ):
         self.run_repo = run_repo
         self.baseline_evaluator = baseline_evaluator
@@ -39,7 +48,7 @@ class PipelineRunner:
         self.fusion_service = fusion_service
         self.judge_repo = judge_repo
         self.judge_semaphore = asyncio.Semaphore(judge_concurrency)
-        self.parser = TraceParser()
+        self.parser = trace_parser or TraceParser()
 
     async def create_run(
         self,
@@ -132,10 +141,44 @@ class PipelineRunner:
             )
             raise EvaluationError(str(e), run_id=str(run_id))
 
+    async def execute_single_input(
+        self,
+        run_id: UUID,
+        evaluation_input: EvaluationInput,
+        trace_data: list[dict],
+        judge_enabled: bool = False,
+    ) -> ScoreResult:
+        try:
+            await self.run_repo.update_status(run_id, RunStatus.EVALUATING_BASELINE)
+            baseline = await self.baseline_evaluator.evaluate_input(
+                run_id, evaluation_input, trace_data
+            )
+
+            if not judge_enabled or self.judge_evaluator is None:
+                await self.run_repo.update_status(run_id, RunStatus.COMPLETED)
+                return baseline
+
+            await self.run_repo.update_status(run_id, RunStatus.AWAITING_JUDGE)
+            await self.run_repo.update_status(run_id, RunStatus.EVALUATING_JUDGE)
+            fused = await self._judge_and_fuse_single(
+                run_id,
+                evaluation_input,
+                {(evaluation_input.question_id, evaluation_input.attempt_index): trace_data},
+                {(evaluation_input.question_id, evaluation_input.attempt_index): baseline},
+            )
+            await self.run_repo.update_status(run_id, RunStatus.COMPLETED)
+            return fused
+        except Exception as e:
+            logger.exception(f"Single input pipeline failed for run {run_id}")
+            await self.run_repo.update_status(
+                run_id, RunStatus.FAILED, error_stack=str(e)
+            )
+            raise EvaluationError(str(e), run_id=str(run_id))
+
     async def _load_traces(self, manifest: Manifest) -> dict[str, list[dict]]:
         trace_map = {}
         for question in manifest.questions:
-            trace_path = f"backend/sample_data/traces/valid_trace.jsonl"
+            trace_path = f"backend/sample_data/traces/{question.question_id}.jsonl"
             try:
                 trace_data = await self.parser.parse(trace_path)
             except FileNotFoundError:
