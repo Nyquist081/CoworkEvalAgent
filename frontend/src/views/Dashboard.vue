@@ -34,6 +34,7 @@
             </div>
             <el-radio-group v-model="form.mode" size="small">
               <el-radio-button label="demo">快速体验</el-radio-button>
+              <el-radio-button label="skillab">Skill 对照实验</el-radio-button>
               <el-radio-button label="offline">评测自己的结果</el-radio-button>
               <el-radio-button label="single">单文件调试</el-radio-button>
             </el-radio-group>
@@ -54,7 +55,15 @@
           <el-button @click="useDemoBundle">填入示例</el-button>
         </div>
 
-        <div v-if="form.mode !== 'single'" class="field-grid">
+        <div v-if="form.mode === 'skillab'" class="mode-card compare-mode">
+          <div class="mode-copy">
+            <b>跑一组无 Skill / 有 Skill 对照</b>
+            <span>平台会先生成 baseline，再生成启用 Skill 的版本，最后自动评测并跳转多版本对比。</span>
+          </div>
+          <el-button @click="useSkillABDemo">填入对照示例</el-button>
+        </div>
+
+        <div v-if="form.mode === 'demo' || form.mode === 'offline'" class="field-grid">
           <label>
             <span>评测集目录</span>
             <el-input v-model="form.benchmarkRoot" placeholder="../evaluations/industrial-demo" />
@@ -64,6 +73,40 @@
             <span>版本名称</span>
             <el-input v-model="form.runLabel" placeholder="alarm-with-skill" />
             <small>例如 baseline、skill-v2、gpt-5-exp。</small>
+          </label>
+        </div>
+
+        <div v-if="form.mode === 'skillab'" class="field-grid">
+          <label>
+            <span>评测集目录</span>
+            <el-input v-model="form.benchmarkRoot" placeholder="../evaluations/industrial-demo" />
+            <small>目录里应包含 manifest.json；实验结果会写入 runs 文件夹。</small>
+          </label>
+          <label>
+            <span>执行预设</span>
+            <el-select v-model="form.preset">
+              <el-option label="演示预设：立即生成样例" value="mock-demo" />
+              <el-option label="Claude Code：使用后端配置" value="claude-code" />
+            </el-select>
+            <small>真实 Claude 命令只从后端配置读取，浏览器不能传任意命令。</small>
+          </label>
+          <label>
+            <span>无 Skill 版本名</span>
+            <el-input v-model="form.baselineRunLabel" placeholder="baseline-no-skill" />
+            <small>这是对照组，用来判断 Claude 自己能做到什么程度。</small>
+          </label>
+          <label>
+            <span>有 Skill 版本名</span>
+            <el-input v-model="form.skillRunLabel" placeholder="alarm-with-skill" />
+            <small>这是实验组，用来衡量 Skill 是否真的带来提升。</small>
+          </label>
+          <label>
+            <span>模型名称</span>
+            <el-input v-model="form.model" placeholder="claude-code / deepseek / demo" />
+          </label>
+          <label>
+            <span>Skill 版本</span>
+            <el-input v-model="form.skillVersion" placeholder="alarm_analysis@v1" />
           </label>
         </div>
 
@@ -154,25 +197,32 @@
       </template>
       <div class="result-summary">
         <div>
-          <span>版本名称</span>
-          <b>{{ lastResult.run_label || lastResult.question_name || '-' }}</b>
+          <span>{{ isPairResult ? '对照组' : '版本名称' }}</span>
+          <b>{{ isPairResult ? lastResult.baseline.run_label : (lastResult.run_label || lastResult.question_name || '-') }}</b>
         </div>
         <div>
-          <span>评测集</span>
-          <b>{{ lastResult.benchmark_id || form.benchmark_id }}</b>
+          <span>{{ isPairResult ? '实验组' : '评测集' }}</span>
+          <b>{{ isPairResult ? lastResult.skill.run_label : (lastResult.benchmark_id || form.benchmark_id) }}</b>
         </div>
         <div>
           <span>Judge</span>
           <b>{{ lastResult.judge_enabled || form.useJudge ? '已启用' : '未启用' }}</b>
         </div>
         <div>
-          <span>结果编号</span>
-          <b>{{ shortId(lastResult.run_id) }}</b>
+          <span>{{ isPairResult ? '对比编号' : '结果编号' }}</span>
+          <b>{{ isPairResult ? `${shortId(lastResult.baseline.run_id)} / ${shortId(lastResult.skill.run_id)}` : shortId(lastResult.run_id) }}</b>
         </div>
       </div>
       <div class="button-row">
-        <el-button type="primary" @click="goRun(lastResult.run_id)">查看结果详情</el-button>
-        <el-button @click="goCompareWith(lastResult.run_id)">拿这个版本去对比</el-button>
+        <template v-if="isPairResult">
+          <el-button type="primary" @click="goComparePair">查看对照结果</el-button>
+          <el-button @click="goRun(lastResult.baseline.run_id)">查看 baseline</el-button>
+          <el-button @click="goRun(lastResult.skill.run_id)">查看 Skill 版本</el-button>
+        </template>
+        <template v-else>
+          <el-button type="primary" @click="goRun(lastResult.run_id)">查看结果详情</el-button>
+          <el-button @click="goCompareWith(lastResult.run_id)">拿这个版本去对比</el-button>
+        </template>
       </div>
     </el-card>
 
@@ -250,6 +300,11 @@ const form = reactive({
   mode: 'demo',
   benchmarkRoot: '../evaluations/industrial-demo',
   runLabel: 'alarm-with-skill',
+  preset: 'mock-demo',
+  baselineRunLabel: 'baseline-no-skill',
+  skillRunLabel: 'alarm-with-skill',
+  model: '',
+  skillVersion: 'alarm_analysis@demo',
   benchmark_id: '',
   question_id: '',
   traceFile: null as File | null,
@@ -260,8 +315,13 @@ const form = reactive({
 const completedRuns = computed(() => runs.value.filter((run: any) => run.status === 'COMPLETED').length)
 const latestRunLabel = computed(() => runs.value[0]?.run_label || shortId(runs.value[0]?.id) || '-')
 const selectedQuestion = computed(() => questions.value.find((question: any) => question.question_id === form.question_id))
+const isPairResult = computed(() => Boolean(lastResult.value?.baseline && lastResult.value?.skill))
 const canRun = computed(() => {
   if (form.mode === 'single') return form.benchmark_id && form.question_id && form.traceFile
+  if (form.mode === 'skillab') {
+    return form.benchmarkRoot && form.preset && form.baselineRunLabel && form.skillRunLabel
+      && form.baselineRunLabel !== form.skillRunLabel
+  }
   return form.benchmarkRoot && form.runLabel
 })
 const wizardStep = computed(() => {
@@ -279,6 +339,9 @@ const friendlyEvalError = computed(() => {
 })
 const directoryPreview = computed(() => {
   if (form.mode === 'single') return '上传的 .jsonl Trace 文件'
+  if (form.mode === 'skillab') {
+    return `runs/${form.baselineRunLabel || 'baseline-no-skill'}/... + runs/${form.skillRunLabel || 'with-skill'}/...`
+  }
   return `runs/${form.runLabel || '版本名称'}/题目ID/attempt-1/trace.jsonl`
 })
 const readinessChecks = computed(() => {
@@ -287,6 +350,16 @@ const readinessChecks = computed(() => {
       { label: '评测集', value: form.benchmark_id || '请选择评测集', ok: Boolean(form.benchmark_id) },
       { label: '题目', value: selectedQuestion.value?.question_name || '请选择题目', ok: Boolean(form.question_id) },
       { label: 'Trace 文件', value: form.traceName || '请选择 .jsonl 文件', ok: Boolean(form.traceFile) },
+      { label: '评分方式', value: form.useJudge ? '规则评分 + Judge' : '规则评分', ok: true },
+    ]
+  }
+  if (form.mode === 'skillab') {
+    return [
+      { label: '评测集目录', value: form.benchmarkRoot || '请输入目录', ok: Boolean(form.benchmarkRoot) },
+      { label: '执行预设', value: form.preset === 'mock-demo' ? '演示预设' : 'Claude Code 后端预设', ok: Boolean(form.preset) },
+      { label: '对照组', value: form.baselineRunLabel || '请输入无 Skill 版本名', ok: Boolean(form.baselineRunLabel) },
+      { label: '实验组', value: form.skillRunLabel || '请输入有 Skill 版本名', ok: Boolean(form.skillRunLabel) },
+      { label: '版本名检查', value: form.baselineRunLabel === form.skillRunLabel ? '两个版本名不能相同' : '两个版本会分开保存', ok: form.baselineRunLabel !== form.skillRunLabel },
       { label: '评分方式', value: form.useJudge ? '规则评分 + Judge' : '规则评分', ok: true },
     ]
   }
@@ -340,6 +413,16 @@ function useDemoBundle() {
   form.mode = 'demo'
   form.benchmarkRoot = '../evaluations/industrial-demo'
   form.runLabel = 'alarm-with-skill'
+}
+
+function useSkillABDemo() {
+  form.mode = 'skillab'
+  form.benchmarkRoot = '../evaluations/industrial-demo'
+  form.preset = 'mock-demo'
+  form.baselineRunLabel = 'baseline-no-skill'
+  form.skillRunLabel = 'alarm-with-skill'
+  form.model = 'demo'
+  form.skillVersion = 'alarm_analysis@demo'
 }
 
 function handleTraceSelect(event: Event) {
@@ -398,6 +481,22 @@ async function runEval() {
   error.eval = ''
   lastResult.value = null
   try {
+    if (form.mode === 'skillab') {
+      const res = await axios.post(`${API}/experiments/skill-ab`, {
+        benchmark_root: form.benchmarkRoot,
+        preset: form.preset,
+        baseline_run_label: form.baselineRunLabel,
+        skill_run_label: form.skillRunLabel,
+        judge_enabled: form.useJudge,
+        model: form.model,
+        skill_version: form.skillVersion,
+      })
+      lastResult.value = res.data
+      ElMessage.success('对照实验完成，已生成两个可比较版本')
+      await loadData()
+      return
+    }
+
     if (form.mode !== 'single') {
       const res = await axios.post(`${API}/runs/evaluate-offline`, {
         benchmark_root: form.benchmarkRoot,
@@ -432,7 +531,13 @@ function goRun(id: string) {
 }
 
 function goCompareWith(id: string) {
-  router.push({ path: '/compare', query: { runs: id } })
+  window.location.href = `/compare?runs=${encodeURIComponent(id)}`
+}
+
+function goComparePair() {
+  if (!lastResult.value?.compare_run_ids?.length) return
+  const ids = lastResult.value.compare_run_ids.join(',')
+  window.location.href = `/compare?runs=${encodeURIComponent(ids)}`
 }
 
 async function deleteRun(runId: string) {

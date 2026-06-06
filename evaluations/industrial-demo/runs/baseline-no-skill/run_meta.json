@@ -1,0 +1,9 @@
+{
+  "run_label": "baseline-no-skill",
+  "agent_name": "mock-claude",
+  "model": "demo-baseline",
+  "skill_version": "none",
+  "source": "sidecar",
+  "trace_quality": "full",
+  "created_at": "2026-06-06T00:00:00+08:00"
+}
