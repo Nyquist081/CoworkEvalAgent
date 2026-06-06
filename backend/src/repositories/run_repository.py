@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 from sqlalchemy import select, delete
 
 from src.infrastructure.database import Base
-from src.core.schemas import TaskRun, RunStatus
+from src.core.schemas import TaskRun, RunStatus, RunSource, TraceQuality
 from src.core.interfaces import RunRepository
 
 
@@ -25,6 +25,12 @@ class TaskRunModel(Base):
 
     id = Column(BLOB, primary_key=True)
     benchmark_id = Column(String, nullable=False)
+    run_label = Column(String, nullable=False, default="")
+    agent_name = Column(String, nullable=False, default="")
+    model = Column(String, nullable=False, default="")
+    skill_version = Column(String, nullable=False, default="")
+    source = Column(String, nullable=False, default="offline")
+    trace_quality = Column(String, nullable=False, default="full")
     status = Column(String, nullable=False, default="PENDING")
     error_stack = Column(Text, nullable=True)
     is_partial_score = Column(Boolean, default=False)
@@ -37,6 +43,12 @@ class TaskRunModel(Base):
         return TaskRun(
             id=_bytes_to_uuid(self.id),
             benchmark_id=self.benchmark_id,
+            run_label=self.run_label or "",
+            agent_name=self.agent_name or "",
+            model=self.model or "",
+            skill_version=self.skill_version or "",
+            source=RunSource(self.source or "offline"),
+            trace_quality=TraceQuality(self.trace_quality or "full"),
             status=RunStatus(self.status),
             error_stack=self.error_stack,
             is_partial_score=self.is_partial_score,
@@ -50,6 +62,12 @@ class TaskRunModel(Base):
         return cls(
             id=_uuid_to_bytes(run.id),
             benchmark_id=run.benchmark_id,
+            run_label=run.run_label,
+            agent_name=run.agent_name,
+            model=run.model,
+            skill_version=run.skill_version,
+            source=run.source.value,
+            trace_quality=run.trace_quality.value,
             status=run.status.value,
             error_stack=run.error_stack,
             is_partial_score=run.is_partial_score,

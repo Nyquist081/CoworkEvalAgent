@@ -1,7 +1,7 @@
 import pytest
 import pytest_asyncio
 from uuid import uuid4
-from src.core.schemas import ScoreResult
+from src.core.schemas import ScoreResult, TraceQuality
 from src.repositories.score_repository import ScoreRepositoryImpl
 from src.infrastructure.database import init_db, drop_db, async_session
 
@@ -39,3 +39,27 @@ async def test_get_by_run_and_question():
     assert fetched.t1_completion == 70.0
     missing = await repo.get_by_run_and_question(run_id, "nonexistent")
     assert missing is None
+
+
+@pytest.mark.asyncio
+async def test_score_repository_round_trips_attempt_metadata():
+    repo = ScoreRepositoryImpl(async_session)
+    run_id = uuid4()
+    score = ScoreResult(
+        run_id=run_id,
+        question_id="q-1",
+        attempt_index=2,
+        trace_quality=TraceQuality.DEGRADED,
+        is_partial_score=True,
+        t1_completion=75.0,
+        overall_score=70.0,
+    )
+
+    await repo.save(score)
+    loaded = await repo.get_by_run_question_attempt(run_id, "q-1", 2)
+
+    assert loaded is not None
+    assert loaded.attempt_index == 2
+    assert loaded.trace_quality == TraceQuality.DEGRADED
+    assert loaded.is_partial_score is True
+    assert loaded.t1_completion == 75.0

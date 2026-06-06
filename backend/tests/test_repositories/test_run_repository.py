@@ -1,7 +1,7 @@
 import pytest
 import pytest_asyncio
 from uuid import uuid4
-from src.core.schemas import TaskRun, RunStatus
+from src.core.schemas import TaskRun, RunStatus, RunSource, TraceQuality
 from src.repositories.run_repository import RunRepositoryImpl
 from src.infrastructure.database import init_db, drop_db, async_session
 
@@ -61,3 +61,30 @@ async def test_delete():
     await repo.delete(run.id)
     fetched = await repo.get(run.id)
     assert fetched is None
+
+
+@pytest.mark.asyncio
+async def test_run_repository_round_trips_metadata():
+    repo = RunRepositoryImpl(async_session)
+    run = TaskRun(
+        benchmark_id="bench-meta",
+        run_label="skill-v2",
+        agent_name="codex-cli",
+        model="gpt-5",
+        skill_version="v2",
+        source=RunSource.OFFLINE,
+        trace_quality=TraceQuality.DEGRADED,
+        is_partial_score=True,
+    )
+
+    await repo.save(run)
+    loaded = await repo.get(run.id)
+
+    assert loaded is not None
+    assert loaded.run_label == "skill-v2"
+    assert loaded.agent_name == "codex-cli"
+    assert loaded.model == "gpt-5"
+    assert loaded.skill_version == "v2"
+    assert loaded.source == RunSource.OFFLINE
+    assert loaded.trace_quality == TraceQuality.DEGRADED
+    assert loaded.is_partial_score is True

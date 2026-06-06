@@ -54,6 +54,12 @@ class ScoreRepository(ABC):
         ...
 
     @abstractmethod
+    async def get_by_run_question_attempt(
+        self, run_id: UUID, question_id: str, attempt_index: int
+    ) -> Optional[ScoreResult]:
+        ...
+
+    @abstractmethod
     async def list_by_run(self, run_id: UUID) -> list[ScoreResult]:
         ...
 

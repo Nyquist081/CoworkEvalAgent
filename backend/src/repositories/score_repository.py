@@ -1,13 +1,13 @@
 from __future__ import annotations
 from typing import Optional
 from uuid import UUID
-from sqlalchemy import Column, String, Float
+from sqlalchemy import Column, String, Float, Boolean
 from sqlalchemy.dialects.sqlite import BLOB
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from sqlalchemy import select
 
 from src.infrastructure.database import Base
-from src.core.schemas import ScoreResult
+from src.core.schemas import ScoreResult, TraceQuality
 
 
 def _uuid_to_bytes(u: UUID) -> bytes:
@@ -24,6 +24,9 @@ class ScoreResultModel(Base):
     id = Column(BLOB, primary_key=True)
     run_id = Column(BLOB, nullable=False)
     question_id = Column(String, nullable=False)
+    attempt_index = Column(Float, default=1)
+    trace_quality = Column(String, nullable=False, default="full")
+    is_partial_score = Column(Boolean, default=False)
 
     t1_completion = Column(Float, nullable=True)
     t2_accuracy = Column(Float, nullable=True)
@@ -48,6 +51,9 @@ class ScoreResultModel(Base):
             id=_bytes_to_uuid(self.id),
             run_id=_bytes_to_uuid(self.run_id),
             question_id=self.question_id,
+            attempt_index=int(self.attempt_index or 1),
+            trace_quality=TraceQuality(self.trace_quality or "full"),
+            is_partial_score=bool(self.is_partial_score),
             t1_completion=self.t1_completion,
             t2_accuracy=self.t2_accuracy,
             t3_efficiency=self.t3_efficiency,
@@ -71,6 +77,9 @@ class ScoreResultModel(Base):
             id=_uuid_to_bytes(s.id),
             run_id=_uuid_to_bytes(s.run_id),
             question_id=s.question_id,
+            attempt_index=s.attempt_index,
+            trace_quality=s.trace_quality.value,
+            is_partial_score=s.is_partial_score,
             t1_completion=s.t1_completion,
             t2_accuracy=s.t2_accuracy,
             t3_efficiency=s.t3_efficiency,
@@ -107,6 +116,20 @@ class ScoreRepositoryImpl:
                 select(ScoreResultModel).where(
                     ScoreResultModel.run_id == _uuid_to_bytes(run_id),
                     ScoreResultModel.question_id == question_id,
+                )
+            )
+            model = result.scalar_one_or_none()
+            return model.to_domain() if model else None
+
+    async def get_by_run_question_attempt(
+        self, run_id: UUID, question_id: str, attempt_index: int
+    ) -> Optional[ScoreResult]:
+        async with self.session_factory() as session:
+            result = await session.execute(
+                select(ScoreResultModel).where(
+                    ScoreResultModel.run_id == _uuid_to_bytes(run_id),
+                    ScoreResultModel.question_id == question_id,
+                    ScoreResultModel.attempt_index == attempt_index,
                 )
             )
             model = result.scalar_one_or_none()
