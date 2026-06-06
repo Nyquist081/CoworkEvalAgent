@@ -77,3 +77,41 @@ trace.write_text("\\n".join(json.dumps(e) for e in events) + "\\n", encoding="ut
     meta = json.loads((benchmark_root / "runs" / "fake-run" / "run_meta.json").read_text(encoding="utf-8"))
     assert meta["agent_name"] == "fake-cli"
     assert meta["trace_quality"] == "full"
+
+
+def test_sidecar_writes_degraded_trace_when_agent_trace_missing(tmp_path):
+    benchmark_root = tmp_path / "evaluations" / "bench-1"
+    benchmark_root.mkdir(parents=True)
+    write_manifest(benchmark_root)
+
+    script = tmp_path / "fake_agent_no_trace.py"
+    script.write_text(
+        """
+from pathlib import Path
+import sys
+out = Path(sys.argv[1])
+out.mkdir(parents=True, exist_ok=True)
+(out / "result.txt").write_text("done without trace", encoding="utf-8")
+print("completed")
+""",
+        encoding="utf-8",
+    )
+
+    config = SidecarRunConfig(
+        benchmark_root=benchmark_root,
+        run_label="degraded-run",
+        agent=AgentCommandConfig(
+            name="fake-cli",
+            command_template=f"{sys.executable} {script} {{output_dir}}",
+        ),
+    )
+
+    results = SidecarRunner(config).run()
+
+    assert results[0]["trace_quality"] == "degraded"
+    trace_path = benchmark_root / "runs" / "degraded-run" / "q-1" / "attempt-1" / "trace.jsonl"
+    events = [json.loads(line) for line in trace_path.read_text(encoding="utf-8").splitlines()]
+    assert events[0]["trace_quality"] == "degraded"
+    assert events[-1]["status"] == "success"
+    meta = json.loads((benchmark_root / "runs" / "degraded-run" / "run_meta.json").read_text(encoding="utf-8"))
+    assert meta["trace_quality"] == "degraded"
