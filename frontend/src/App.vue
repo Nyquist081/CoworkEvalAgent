@@ -1,14 +1,13 @@
 <template>
   <el-container style="min-height: 100vh">
-    <el-header style="background: #1a1a2e; color: white; display: flex; align-items: center; padding: 0 24px;">
-      <h2 style="margin: 0; font-weight: 300; cursor: pointer;" @click="goHome">CoworkEval</h2>
-      <el-menu mode="horizontal" :default-active="route.path" router
-        style="margin-left: 40px; border-bottom: none; background: transparent;">
-        <el-menu-item index="/" style="color: #ccc;">📊 Dashboard</el-menu-item>
-        <el-menu-item index="/compare" style="color: #ccc;">📈 多版本对比</el-menu-item>
-      </el-menu>
+    <el-header class="app-header">
+      <h2 @click="goHome">CoworkEval</h2>
+      <nav class="app-menu">
+        <button :class="{ active: route.path === '/' }" @click="router.push('/')">评测操作台</button>
+        <button :class="{ active: route.path === '/compare' }" @click="router.push('/compare')">版本对比</button>
+      </nav>
     </el-header>
-    <el-main style="background: #f5f7fa;">
+    <el-main class="app-main">
       <router-view />
     </el-main>
   </el-container>
@@ -20,3 +19,70 @@ const route = useRoute()
 const router = useRouter()
 function goHome() { router.push({name:'dashboard'}).catch(()=>{window.location.href='/'}) }
 </script>
+
+<style scoped>
+.app-header {
+  display: flex;
+  align-items: center;
+  padding: 0 28px;
+  color: #fff;
+  background: #121827;
+}
+
+.app-header h2 {
+  margin: 0;
+  color: #fff;
+  font-weight: 650;
+  letter-spacing: 0;
+  cursor: pointer;
+}
+
+.app-menu {
+  display: flex;
+  gap: 8px;
+  margin-left: 36px;
+}
+
+.app-menu button {
+  height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 6px;
+  color: #d0d6e1;
+  background: transparent;
+  cursor: pointer;
+}
+
+.app-menu button.active,
+.app-menu button:hover {
+  color: #fff;
+  background: rgba(255,255,255,0.1);
+}
+
+.app-main {
+  background: #f4f6fa;
+  padding: 24px 28px;
+}
+
+@media (max-width: 640px) {
+  .app-header {
+    padding: 0 16px;
+  }
+
+  .app-header h2 {
+    font-size: 20px;
+  }
+
+  .app-menu {
+    margin-left: 16px;
+  }
+
+  .app-menu button {
+    padding: 0 10px;
+  }
+
+  .app-main {
+    padding: 20px 14px;
+  }
+}
+</style>
