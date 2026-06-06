@@ -11,7 +11,7 @@ class MetaAnalyzer:
 
     def __init__(self, pass_threshold: float | None = None):
         self.pass_threshold = pass_threshold or float(
-            os.getenv("PASS_THRESHOLD", "0.6")
+            os.getenv("PASS_THRESHOLD", "60")
         )
 
     def compute_pass_rates(
@@ -29,6 +29,18 @@ class MetaAnalyzer:
             dict with pass_at_k, pass_power_k, pass_at_k_pct, pass_power_k_pct,
             pp_gap, total_questions, threshold
         """
+        if not scores_by_question:
+            return {
+                "pass_at_k": 0,
+                "pass_power_k": 0,
+                "pass_at_k_pct": 0.0,
+                "pass_power_k_pct": 0.0,
+                "pp_gap": 0.0,
+                "total_questions": 0,
+                "k": 0 if k is None else k,
+                "threshold": self.pass_threshold,
+            }
+
         if k is None:
             k = max(len(scores) for scores in scores_by_question.values())
 
@@ -62,6 +74,15 @@ class MetaAnalyzer:
             "k": k,
             "threshold": self.pass_threshold,
         }
+
+    @staticmethod
+    def group_scores_by_question(scores: list[ScoreResult]) -> dict[str, list[ScoreResult]]:
+        grouped: dict[str, list[ScoreResult]] = {}
+        for score in scores:
+            grouped.setdefault(score.question_id, []).append(score)
+        for values in grouped.values():
+            values.sort(key=lambda s: s.attempt_index)
+        return dict(sorted(grouped.items()))
 
     def build_common_issues_input(
         self, judge_results: list[JudgeResult]
@@ -127,3 +148,65 @@ class MetaAnalyzer:
             "ERRONEOUS": "tool_accuracy",
         }
         return mapping.get(assessment)
+
+    def extract_common_issues(self, judge_results: list[JudgeResult]) -> dict:
+        if not judge_results:
+            return {
+                "status": "not_extracted",
+                "summary": "",
+                "common_issues": [],
+                "improvement_suggestions": [],
+            }
+
+        issue_map: dict[tuple[str, str], dict] = {}
+        suggestions: dict[tuple[str, str], dict] = {}
+
+        for jr in judge_results:
+            for step in jr.critical_steps:
+                dimension = self._map_assessment_to_dimension(step.assessment) or "task_completion"
+                key = (dimension, step.observation)
+                issue = issue_map.setdefault(
+                    key,
+                    {
+                        "dimension": dimension,
+                        "issue": step.observation,
+                        "frequency": "",
+                        "impact": step.context_chain,
+                        "question_ids": [],
+                        "examples": [],
+                    },
+                )
+                if jr.question_id not in issue["question_ids"]:
+                    issue["question_ids"].append(jr.question_id)
+                issue["examples"].append(f"{jr.question_id} {step.step_id}: {step.root_cause}")
+
+            for suggestion in jr.evolution_suggestions:
+                key = (suggestion.type, suggestion.suggestion)
+                suggestions.setdefault(
+                    key,
+                    {
+                        "type": suggestion.type,
+                        "priority": "中",
+                        "suggestion": suggestion.suggestion,
+                        "expected_impact": "基于当前 Judge 结果的确定性归纳",
+                    },
+                )
+
+        common_issues = list(issue_map.values())
+        total = len(judge_results)
+        for issue in common_issues:
+            count = len(issue["question_ids"])
+            issue["frequency"] = f"{count}/{total} 题"
+
+        common_issues.sort(key=lambda item: len(item["question_ids"]), reverse=True)
+        summary = (
+            f"共分析 {total} 道题的 Judge 结果, "
+            f"提取 {len(common_issues)} 类可归因问题。"
+        )
+
+        return {
+            "status": "extracted",
+            "summary": summary,
+            "common_issues": common_issues[:6],
+            "improvement_suggestions": list(suggestions.values())[:5],
+        }
