@@ -3,7 +3,7 @@ import asyncio
 import logging
 from uuid import UUID
 
-from src.core.schemas import TaskRun, Manifest, QuestionItem, RunStatus, ScoreResult
+from src.core.schemas import TaskRun, Manifest, QuestionItem, RunMetadata, RunStatus, ScoreResult
 from src.core.interfaces import RunRepository, BaseEvaluator
 from src.core.state_machine import StateMachine
 from src.core.exceptions import EvaluationError, IncompleteTraceError
@@ -41,12 +41,24 @@ class PipelineRunner:
         self.judge_semaphore = asyncio.Semaphore(judge_concurrency)
         self.parser = TraceParser()
 
-    async def create_run(self, manifest: Manifest, judge_enabled: bool = True) -> TaskRun:
+    async def create_run(
+        self,
+        manifest: Manifest,
+        judge_enabled: bool = True,
+        run_metadata: RunMetadata | None = None,
+    ) -> TaskRun:
         run = TaskRun(
             benchmark_id=manifest.benchmark_id,
             status=RunStatus.PENDING,
             judge_enabled=judge_enabled,
         )
+        if run_metadata is not None:
+            run.run_label = run_metadata.run_label
+            run.agent_name = run_metadata.agent_name
+            run.model = run_metadata.model
+            run.skill_version = run_metadata.skill_version
+            run.source = run_metadata.source
+            run.trace_quality = run_metadata.trace_quality
         await self.run_repo.save(run)
         return run
 

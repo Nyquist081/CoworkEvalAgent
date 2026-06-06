@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from pydantic import BaseModel
 from uuid import UUID
 from src.core.schemas import TaskRun, RunStatus, Manifest
 from src.repositories.run_repository import RunRepositoryImpl
@@ -6,10 +7,21 @@ from src.repositories.manifest_repository import ManifestRepository
 from src.infrastructure.database import async_session
 from src.services.pipeline_runner import PipelineRunner
 from src.services.baseline_evaluator import BaselineEvaluator
+from src.services.evaluation_loader import EvaluationLoader
+from src.services.fusion_service import FusionService
+from src.services.judge_evaluator import JudgeEvaluator
+from src.infrastructure.llm_gateway import LLMClient
+from src.repositories.judge_result_repository import JudgeResultRepositoryImpl
 from src.repositories.score_repository import ScoreRepositoryImpl
 from src.evaluator.result_comparator import ResultComparator
 
 router = APIRouter(prefix="/runs")
+
+
+class OfflineEvaluateRequest(BaseModel):
+    benchmark_root: str
+    run_label: str
+    judge_enabled: bool = False
 
 
 def _run_repo():
@@ -17,12 +29,19 @@ def _run_repo():
 
 
 def _build_pipeline():
+    judge_repo = JudgeResultRepositoryImpl(async_session)
     return PipelineRunner(
         run_repo=_run_repo(),
         baseline_evaluator=BaselineEvaluator(
             score_repo=ScoreRepositoryImpl(async_session),
             comparator=ResultComparator(),
         ),
+        judge_evaluator=JudgeEvaluator(
+            judge_repo=judge_repo,
+            llm_client=LLMClient(),
+        ),
+        fusion_service=FusionService(),
+        judge_repo=judge_repo,
     )
 
 
@@ -36,6 +55,30 @@ async def create_run(benchmark_id: str = Form(...), judge_enabled: bool = Form(F
     pipeline = _build_pipeline()
     run = await pipeline.create_run(manifest, judge_enabled=judge_enabled)
     return run
+
+
+@router.post("/evaluate-offline", response_model=dict)
+async def evaluate_offline_run(request: OfflineEvaluateRequest):
+    loader = EvaluationLoader(request.benchmark_root)
+    bundle = loader.load_run(request.run_label)
+    pipeline = _build_pipeline()
+    run = await pipeline.create_run(
+        bundle.manifest,
+        judge_enabled=request.judge_enabled,
+        run_metadata=bundle.run_metadata,
+    )
+    scores = await pipeline.execute_offline_run(
+        run.id,
+        bundle.inputs,
+        judge_enabled=request.judge_enabled,
+    )
+    return {
+        "run_id": str(run.id),
+        "benchmark_id": bundle.manifest.benchmark_id,
+        "run_label": bundle.run_metadata.run_label,
+        "score_count": len(scores),
+        "judge_enabled": request.judge_enabled,
+    }
 
 
 @router.post("/evaluate", response_model=dict)
