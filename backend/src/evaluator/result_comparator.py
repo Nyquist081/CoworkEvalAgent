@@ -106,3 +106,29 @@ class ResultComparator:
         scores.append(value_score * 0.40)
 
         return max(0.0, min(100.0, sum(scores)))
+
+    def compare_many(
+        self,
+        output_dir: str | Path,
+        reference_paths: list[str | Path],
+        eval_config: EvalConfig,
+    ) -> float:
+        out_dir = Path(output_dir)
+        if not out_dir.exists() or not out_dir.is_dir():
+            return 0.0
+
+        output_files = [
+            p for p in sorted(out_dir.iterdir())
+            if p.suffix.lower() in {".xlsx", ".csv"}
+        ]
+        if not output_files or not reference_paths:
+            return 0.0
+
+        best = 0.0
+        for output_file in output_files:
+            for reference_path in reference_paths:
+                best = max(
+                    best,
+                    self.compare(str(output_file), str(reference_path), eval_config),
+                )
+        return best

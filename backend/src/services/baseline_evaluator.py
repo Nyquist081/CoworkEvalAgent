@@ -3,7 +3,7 @@ from typing import Optional
 from uuid import UUID
 
 from src.core.interfaces import BaseEvaluator, ScoreRepository
-from src.core.schemas import ScoreResult, QuestionItem, EvalConfig
+from src.core.schemas import EvaluationInput, ScoreResult, QuestionItem, TraceQuality
 from src.evaluator.result_comparator import ResultComparator
 from src.infrastructure.trace_parser import TraceParser
 
@@ -19,11 +19,48 @@ class BaselineEvaluator(BaseEvaluator):
     async def evaluate(
         self, run_id: UUID, question: QuestionItem, trace_data: list[dict]
     ) -> ScoreResult:
+        return await self._evaluate_core(
+            run_id=run_id,
+            question=question,
+            trace_data=trace_data,
+            t1_baseline_only=0.0,
+        )
+
+    async def evaluate_input(
+        self, run_id: UUID, evaluation_input: EvaluationInput, trace_data: list[dict]
+    ) -> ScoreResult:
+        return await self._evaluate_core(
+            run_id=run_id,
+            question=evaluation_input.question,
+            trace_data=trace_data,
+            t1_baseline_only=self.comparator.compare_many(
+                output_dir=evaluation_input.output_dir,
+                reference_paths=evaluation_input.reference_paths,
+                eval_config=evaluation_input.question.eval_config,
+            ),
+            attempt_index=evaluation_input.attempt_index,
+            trace_quality=evaluation_input.trace_quality,
+            is_partial_score=evaluation_input.is_partial_score,
+        )
+
+    async def _evaluate_core(
+        self,
+        run_id: UUID,
+        question: QuestionItem,
+        trace_data: list[dict],
+        t1_baseline_only: float = 0.0,
+        attempt_index: int = 1,
+        trace_quality: TraceQuality = TraceQuality.FULL,
+        is_partial_score: bool = False,
+    ) -> ScoreResult:
         metrics = self.parser.extract_metrics(trace_data)
 
         score = ScoreResult(
             run_id=run_id,
             question_id=question.question_id,
+            attempt_index=attempt_index,
+            trace_quality=trace_quality,
+            is_partial_score=is_partial_score,
             actual_tool_calls=metrics["total_tool_calls"],
             actual_success_calls=metrics["success_tool_calls"],
             actual_tokens=metrics["total_tokens"],
@@ -32,9 +69,8 @@ class BaselineEvaluator(BaseEvaluator):
             actual_cost_usd=metrics["cost_usd"],
         )
 
-        # T1: Task Completion — Baseline objective part (0 until judge fusion)
-        score.t1_baseline_only = 0.0
-        score.t1_completion = 0.0
+        score.t1_baseline_only = t1_baseline_only
+        score.t1_completion = t1_baseline_only
 
         # T2: Tool Accuracy
         score.t2_accuracy = self._compute_t2(

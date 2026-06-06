@@ -2,7 +2,7 @@ import pytest
 from uuid import uuid4
 from unittest.mock import AsyncMock
 from src.services.baseline_evaluator import BaselineEvaluator
-from src.core.schemas import QuestionItem, EvalConfig
+from src.core.schemas import EvaluationInput, QuestionItem, EvalConfig
 from src.evaluator.result_comparator import ResultComparator
 
 
@@ -98,3 +98,52 @@ async def test_no_negative_scores(evaluator, question):
     assert score.e_performance >= 0
     assert score.c_cost >= 0
     assert score.overall_score >= 0
+
+
+@pytest.mark.asyncio
+async def test_evaluate_input_computes_t1_from_output_files(tmp_path):
+    import pandas as pd
+
+    output_dir = tmp_path / "输出结果"
+    output_dir.mkdir()
+    reference = tmp_path / "answer.xlsx"
+    pd.DataFrame({"A": [1]}).to_excel(output_dir / "result.xlsx", index=False)
+    pd.DataFrame({"A": [1]}).to_excel(reference, index=False)
+
+    question = QuestionItem(
+        question_id="q-t1",
+        question_name="T1",
+        category="Excel",
+        difficulty="中等",
+        prompt_file="q-t1/prompt.txt",
+        output_dir="q-t1/输出结果/",
+        reference_files=["q-t1/参考答案/answer.xlsx"],
+        eval_config=EvalConfig(),
+        baseline_tool_count=1,
+        baseline_tokens=100,
+        baseline_rounds=1,
+        baseline_time_ms=1000,
+        baseline_cost_usd=0.1,
+    )
+    trace_data = [
+        {"type": "tool_call", "tool_name": "Read"},
+        {"type": "tool_result", "tool_error": False},
+        {"type": "assistant", "thinking": "done"},
+        {"type": "result", "duration_ms": 500, "input_tokens": 30, "output_tokens": 10, "cost_usd": 0.01},
+    ]
+    item = EvaluationInput(
+        question=question,
+        trace_path=tmp_path / "trace.jsonl",
+        output_dir=output_dir,
+        reference_paths=[reference],
+    )
+    repo = AsyncMock()
+    repo.save = AsyncMock()
+    evaluator = BaselineEvaluator(score_repo=repo, comparator=ResultComparator())
+
+    score = await evaluator.evaluate_input(uuid4(), item, trace_data)
+
+    assert score.t1_baseline_only == 100.0
+    assert score.t1_completion == 100.0
+    assert score.overall_score > 0
+    repo.save.assert_called_once()

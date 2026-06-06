@@ -54,3 +54,20 @@ def test_missing_file_returns_zero():
     comparator = ResultComparator()
     score = comparator.compare(output_path="/nonexistent/output.xlsx", reference_path="/nonexistent/ref.xlsx", eval_config=EvalConfig())
     assert score == 0.0
+
+
+def test_compare_many_uses_best_output_reference_pair(tmp_path):
+    output_dir = tmp_path / "输出结果"
+    output_dir.mkdir()
+    reference = tmp_path / "answer.xlsx"
+
+    pd.DataFrame({"A": [1, 2], "B": ["x", "y"]}).to_excel(output_dir / "result.xlsx", index=False)
+    pd.DataFrame({"A": [1, 2], "B": ["x", "y"]}).to_excel(reference, index=False)
+
+    score = ResultComparator().compare_many(
+        output_dir=output_dir,
+        reference_paths=[reference],
+        eval_config=EvalConfig(),
+    )
+
+    assert score == 100.0
