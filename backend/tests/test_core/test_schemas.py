@@ -1,4 +1,5 @@
 import pytest
+from pathlib import Path
 from src.core.schemas import Manifest, QuestionItem, EvalConfig, FatalRule, IgnoreRule, RunStatus
 
 
@@ -107,3 +108,71 @@ def test_state_transition_error():
     )
     assert err.from_status == "PENDING"
     assert err.to_status == "COMPLETED"
+
+
+def test_evaluation_input_defaults_to_first_attempt():
+    from src.core.schemas import EvaluationInput, QuestionItem, EvalConfig, TraceQuality
+
+    question = QuestionItem(
+        question_id="alarm_analysis-0003",
+        question_name="告警分析",
+        category="Excel",
+        difficulty="中等",
+        prompt_file="alarm_analysis-0003/prompt.txt",
+        input_files=["alarm_analysis-0003/输入文件/告警日志.xlsx"],
+        reference_files=["alarm_analysis-0003/参考答案/告警汇总_answer.xlsx"],
+        output_dir="alarm_analysis-0003/输出结果/",
+        eval_config=EvalConfig(),
+        baseline_tool_count=5,
+        baseline_tokens=1000,
+        baseline_rounds=3,
+        baseline_time_ms=10000,
+        baseline_cost_usd=0.2,
+    )
+
+    item = EvaluationInput(
+        question=question,
+        trace_path=Path("/tmp/run/alarm_analysis-0003/trace.jsonl"),
+        output_dir=Path("/tmp/run/alarm_analysis-0003/输出结果"),
+        reference_paths=[Path("/tmp/eval/alarm_analysis-0003/参考答案/告警汇总_answer.xlsx")],
+    )
+
+    assert item.question_id == "alarm_analysis-0003"
+    assert item.attempt_index == 1
+    assert item.trace_quality == TraceQuality.FULL
+    assert item.is_partial_score is False
+
+
+def test_task_run_accepts_run_metadata():
+    from src.core.schemas import TaskRun, RunSource, TraceQuality
+
+    run = TaskRun(
+        benchmark_id="scene_0328-2",
+        run_label="skill-v2",
+        agent_name="codex-cli",
+        model="gpt-5",
+        skill_version="v2",
+        source=RunSource.OFFLINE,
+        trace_quality=TraceQuality.FULL,
+    )
+
+    assert run.run_label == "skill-v2"
+    assert run.source == RunSource.OFFLINE
+    assert run.trace_quality == TraceQuality.FULL
+
+
+def test_score_result_accepts_attempt_metadata():
+    from uuid import uuid4
+    from src.core.schemas import ScoreResult, TraceQuality
+
+    score = ScoreResult(
+        run_id=uuid4(),
+        question_id="q-1",
+        attempt_index=2,
+        trace_quality=TraceQuality.DEGRADED,
+        is_partial_score=True,
+    )
+
+    assert score.attempt_index == 2
+    assert score.trace_quality == TraceQuality.DEGRADED
+    assert score.is_partial_score is True

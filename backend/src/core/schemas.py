@@ -1,6 +1,7 @@
 from __future__ import annotations
 from datetime import datetime, timezone
 from enum import Enum
+from pathlib import Path
 from typing import Literal, Optional
 from uuid import UUID, uuid4
 
@@ -24,6 +25,16 @@ class JudgeDimension(str, Enum):
     TOOL_ACCURACY = "tool_accuracy"
     THINKING_EFFICIENCY = "thinking_efficiency"
     TASK_COMPLETION = "task_completion"
+
+
+class TraceQuality(str, Enum):
+    FULL = "full"
+    DEGRADED = "degraded"
+
+
+class RunSource(str, Enum):
+    OFFLINE = "offline"
+    SIDECAR = "sidecar"
 
 
 # ── Eval Config ──────────────────────────────────────────
@@ -80,11 +91,41 @@ class Manifest(BaseModel):
     questions: list[QuestionItem] = Field(default_factory=list)
 
 
+class RunMetadata(BaseModel):
+    run_label: str
+    agent_name: str = ""
+    model: str = ""
+    skill_version: str = ""
+    source: RunSource = RunSource.OFFLINE
+    created_at: Optional[datetime] = None
+    trace_quality: TraceQuality = TraceQuality.FULL
+
+
+class EvaluationInput(BaseModel):
+    question: QuestionItem
+    trace_path: Path
+    output_dir: Path
+    reference_paths: list[Path] = Field(default_factory=list)
+    attempt_index: int = 1
+    trace_quality: TraceQuality = TraceQuality.FULL
+    is_partial_score: bool = False
+
+    @property
+    def question_id(self) -> str:
+        return self.question.question_id
+
+
 # ── Task Run ─────────────────────────────────────────────
 
 class TaskRun(BaseModel):
     id: UUID = Field(default_factory=uuid4)
     benchmark_id: str
+    run_label: str = ""
+    agent_name: str = ""
+    model: str = ""
+    skill_version: str = ""
+    source: RunSource = RunSource.OFFLINE
+    trace_quality: TraceQuality = TraceQuality.FULL
     status: RunStatus = RunStatus.PENDING
     error_stack: Optional[str] = None
     is_partial_score: bool = False
@@ -99,6 +140,9 @@ class ScoreResult(BaseModel):
     id: UUID = Field(default_factory=uuid4)
     run_id: UUID
     question_id: str
+    attempt_index: int = 1
+    trace_quality: TraceQuality = TraceQuality.FULL
+    is_partial_score: bool = False
 
     t1_completion: Optional[float] = None
     t2_accuracy: Optional[float] = None
