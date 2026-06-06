@@ -3,7 +3,16 @@ from datetime import datetime, timezone
 from uuid import uuid4
 from unittest.mock import AsyncMock, patch
 from src.services.pipeline_runner import PipelineRunner
-from src.core.schemas import TaskRun, Manifest, QuestionItem, EvalConfig, RunStatus, ScoreResult
+from src.core.schemas import (
+    EvaluationInput,
+    Manifest,
+    QuestionItem,
+    EvalConfig,
+    RunStatus,
+    ScoreResult,
+    TaskRun,
+    TraceQuality,
+)
 from src.core.interfaces import RunRepository
 from src.core.exceptions import EvaluationError
 
@@ -110,3 +119,36 @@ async def test_concurrent_question_processing(mock_run_repo):
     trace_map = {q.question_id: [{"type": "result", "status": "success"}] for q in questions}
     await runner._execute_questions(uuid4(), questions, trace_map)
     assert len(call_order) == 5
+
+
+@pytest.mark.asyncio
+async def test_execute_offline_run_uses_evaluation_inputs(mock_run_repo, manifest, tmp_path):
+    trace_path = tmp_path / "trace.jsonl"
+    trace_path.write_text('{"type":"result","status":"success"}\n', encoding="utf-8")
+    item = EvaluationInput(
+        question=manifest.questions[0],
+        trace_path=trace_path,
+        output_dir=tmp_path / "输出结果",
+        reference_paths=[],
+        attempt_index=1,
+        trace_quality=TraceQuality.FULL,
+    )
+
+    evaluator = AsyncMock()
+    evaluator.evaluate_input = AsyncMock(return_value=ScoreResult(
+        run_id=uuid4(),
+        question_id=manifest.questions[0].question_id,
+        attempt_index=1,
+        overall_score=80.0,
+    ))
+    runner = PipelineRunner(run_repo=mock_run_repo, baseline_evaluator=evaluator)
+    run = TaskRun(benchmark_id=manifest.benchmark_id, judge_enabled=False)
+
+    scores = await runner.execute_offline_run(run.id, [item], judge_enabled=False)
+
+    assert len(scores) == 1
+    evaluator.evaluate_input.assert_called_once()
+    status_calls = [c.args[1] for c in mock_run_repo.update_status.call_args_list]
+    assert RunStatus.PARSING_TRACE in status_calls
+    assert RunStatus.EVALUATING_BASELINE in status_calls
+    assert RunStatus.COMPLETED in status_calls

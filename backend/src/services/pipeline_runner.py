@@ -28,10 +28,16 @@ class PipelineRunner:
         self,
         run_repo: RunRepository,
         baseline_evaluator: BaseEvaluator,
+        judge_evaluator: BaseEvaluator | None = None,
+        fusion_service=None,
+        judge_repo=None,
         judge_concurrency: int = 5,
     ):
         self.run_repo = run_repo
         self.baseline_evaluator = baseline_evaluator
+        self.judge_evaluator = judge_evaluator
+        self.fusion_service = fusion_service
+        self.judge_repo = judge_repo
         self.judge_semaphore = asyncio.Semaphore(judge_concurrency)
         self.parser = TraceParser()
 
@@ -66,6 +72,49 @@ class PipelineRunner:
 
         except Exception as e:
             logger.exception(f"Pipeline failed for run {run_id}")
+            await self.run_repo.update_status(
+                run_id, RunStatus.FAILED, error_stack=str(e)
+            )
+            raise EvaluationError(str(e), run_id=str(run_id))
+
+    async def execute_offline_run(
+        self,
+        run_id: UUID,
+        evaluation_inputs: list,
+        judge_enabled: bool = False,
+    ) -> list[ScoreResult]:
+        sm = StateMachine(judge_enabled=judge_enabled)
+
+        try:
+            await self.run_repo.update_status(run_id, RunStatus.PARSING_TRACE)
+            sm.transition_to(RunStatus.PARSING_TRACE)
+            trace_map = await self._load_input_traces(evaluation_inputs)
+
+            await self.run_repo.update_status(run_id, RunStatus.EVALUATING_BASELINE)
+            sm.transition_to(RunStatus.EVALUATING_BASELINE)
+            baseline_scores = await self._execute_evaluation_inputs(
+                run_id, evaluation_inputs, trace_map
+            )
+
+            if not judge_enabled or self.judge_evaluator is None:
+                await self.run_repo.update_status(run_id, RunStatus.COMPLETED)
+                sm.transition_to(RunStatus.COMPLETED)
+                return baseline_scores
+
+            await self.run_repo.update_status(run_id, RunStatus.AWAITING_JUDGE)
+            sm.transition_to(RunStatus.AWAITING_JUDGE)
+            await self.run_repo.update_status(run_id, RunStatus.EVALUATING_JUDGE)
+            sm.transition_to(RunStatus.EVALUATING_JUDGE)
+            fused_scores = await self._execute_judge_and_fusion(
+                run_id, evaluation_inputs, trace_map, baseline_scores
+            )
+
+            await self.run_repo.update_status(run_id, RunStatus.COMPLETED)
+            sm.transition_to(RunStatus.COMPLETED)
+            return fused_scores
+
+        except Exception as e:
+            logger.exception(f"Offline pipeline failed for run {run_id}")
             await self.run_repo.update_status(
                 run_id, RunStatus.FAILED, error_stack=str(e)
             )
@@ -109,3 +158,41 @@ class PipelineRunner:
         return await self.baseline_evaluator.evaluate(
             run_id=run_id, question=question, trace_data=trace_data,
         )
+
+    async def _load_input_traces(
+        self, evaluation_inputs: list
+    ) -> dict[tuple[str, int], list[dict]]:
+        trace_map = {}
+        for item in evaluation_inputs:
+            trace_map[(item.question_id, item.attempt_index)] = await self.parser.parse(
+                item.trace_path
+            )
+        return trace_map
+
+    async def _execute_evaluation_inputs(
+        self,
+        run_id: UUID,
+        evaluation_inputs: list,
+        trace_map: dict[tuple[str, int], list[dict]],
+    ) -> list[ScoreResult]:
+        tasks = []
+        for item in evaluation_inputs:
+            trace_data = trace_map[(item.question_id, item.attempt_index)]
+            tasks.append(self.baseline_evaluator.evaluate_input(run_id, item, trace_data))
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        scores = []
+        for result in results:
+            if isinstance(result, Exception):
+                raise result
+            scores.append(result)
+        return scores
+
+    async def _execute_judge_and_fusion(
+        self,
+        run_id: UUID,
+        evaluation_inputs: list,
+        trace_map: dict,
+        baseline_scores: list[ScoreResult],
+    ) -> list[ScoreResult]:
+        return baseline_scores
