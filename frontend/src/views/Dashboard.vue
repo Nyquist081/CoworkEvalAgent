@@ -1,101 +1,133 @@
 <template>
-  <div>
-    <h1>📊 CoworkEval 评测平台</h1>
+  <div class="dashboard-shell">
+    <section class="dashboard-hero">
+      <div>
+        <p class="eyebrow">CoworkEval Platform</p>
+        <h1>工业 Agent 离线评测操作台</h1>
+        <p class="hero-copy">从标准 run bundle 启动评测，沉淀版本、模型、Trace 质量和多维评分。</p>
+      </div>
+      <div class="hero-metrics">
+        <div>
+          <span>{{ runs.length }}</span>
+          <small>历史运行</small>
+        </div>
+        <div>
+          <span>{{ completedRuns }}</span>
+          <small>已完成</small>
+        </div>
+        <div>
+          <span>{{ latestRunLabel }}</span>
+          <small>最近版本</small>
+        </div>
+      </div>
+    </section>
 
-    <el-card style="margin-bottom:16px;">
-      <template #header><b>① 评测模式</b></template>
-      <el-radio-group v-model="form.mode">
-        <el-radio-button label="offline">离线 Run Bundle</el-radio-button>
-        <el-radio-button label="single">单 Trace 调试</el-radio-button>
-      </el-radio-group>
-    </el-card>
+    <section class="workspace-grid">
+      <el-card class="run-panel" shadow="never">
+        <template #header>
+          <div class="card-title">
+            <b>新建评测</b>
+            <el-radio-group v-model="form.mode" size="small">
+              <el-radio-button label="offline">离线 Run Bundle</el-radio-button>
+              <el-radio-button label="single">单 Trace 调试</el-radio-button>
+            </el-radio-group>
+          </div>
+        </template>
 
-    <el-card v-if="form.mode === 'offline'" style="margin-bottom:16px;">
-      <template #header><b>② 离线目录</b></template>
-      <el-row :gutter="12">
-        <el-col :span="14">
+        <div v-if="form.mode === 'offline'" class="form-stack">
           <el-input v-model="form.benchmarkRoot" placeholder="../evaluations/industrial-demo">
             <template #prepend>benchmark_root</template>
           </el-input>
-        </el-col>
-        <el-col :span="10">
           <el-input v-model="form.runLabel" placeholder="alarm-with-skill">
             <template #prepend>run_label</template>
           </el-input>
-        </el-col>
-      </el-row>
-    </el-card>
+          <div class="quick-row">
+            <el-button size="small" @click="useDemoBundle">使用 Demo</el-button>
+            <el-tag type="info" effect="plain">runs/{{ form.runLabel || '{label}' }}/{{ previewQuestion }}/attempt-1</el-tag>
+          </div>
+        </div>
 
     <!-- Step 1: Manifest -->
-    <el-card v-if="form.mode === 'single'" style="margin-bottom: 16px;">
-      <template #header><b>② 评测集</b></template>
-      <el-row :gutter="12" align="middle">
-        <el-col :span="12">
+        <div v-if="form.mode === 'single'" class="form-stack">
           <el-select v-model="form.benchmark_id" placeholder="选择评测集" @change="onBenchmarkChange" style="width:100%" :loading="loading.manifests" clearable>
             <el-option v-for="m in manifests" :key="m.benchmark_id" :label="`${m.benchmark_id} (${m.total_questions}题 v${m.version})`" :value="m.benchmark_id" />
           </el-select>
-        </el-col>
-        <el-col :span="12">
+          <el-select v-model="form.question_id" placeholder="选择题号" style="width:100%;" :disabled="!form.benchmark_id">
+            <el-option v-for="q in questions" :key="q.question_id"
+              :label="`${q.question_id} — ${q.question_name} [${q.difficulty}] Skill: ${q.skills || '无'}`"
+              :value="q.question_id" />
+          </el-select>
           <input type="file" accept=".json" @change="handleManifestUpload" ref="mfRef" style="display:none" />
-          <el-button @click="($refs.mfRef as any)?.click()" :loading="loading.uploadManifest">上传新 Manifest JSON</el-button>
-          <span v-if="uploadMsg" style="margin-left:8px;color:#67c23a;">{{ uploadMsg }}</span>
-          <span v-if="error.manifests" style="color:#f56c6c;margin-left:8px;">{{ error.manifests }}</span>
-        </el-col>
-      </el-row>
-    </el-card>
-
-    <!-- Step 2: Question -->
-    <el-card v-if="form.mode === 'single'" style="margin-bottom:16px;">
-      <template #header><b>③ 题目</b> <span style="color:#999;font-weight:400;">(需先选评测集)</span></template>
-      <el-select v-model="form.question_id" placeholder="选择题号" style="width:100%;" :disabled="!form.benchmark_id">
-        <el-option v-for="q in questions" :key="q.question_id"
-          :label="`${q.question_id} — ${q.question_name} [${q.difficulty}] Skill: ${q.skills || '无'}`"
-          :value="q.question_id" />
-      </el-select>
-      <div v-if="selectedQuestion" style="margin-top:8px;font-size:12px;color:#999;">
-        Baseline: {{ selectedQuestion.baseline_tool_count }}工具 {{ selectedQuestion.baseline_tokens }}tokens
-        {{ selectedQuestion.baseline_time_ms }}ms ${{ selectedQuestion.baseline_cost_usd }}
-      </div>
-    </el-card>
-
-    <!-- Step 3: Trace -->
-    <el-card v-if="form.mode === 'single'" style="margin-bottom:16px;">
-      <template #header><b>④ Trace 文件</b> <span style="color:#999;font-weight:400;">(.jsonl 格式)</span></template>
-      <input type="file" accept=".jsonl" @change="(e:any)=>{form.traceFile=e.target?.files?.[0]||null; form.traceName=e.target?.files?.[0]?.name||''}" ref="trRef" style="display:none" />
-      <el-row :gutter="12" align="middle">
-        <el-col :span="8">
-          <el-button @click="($refs.trRef as any)?.click()">选择 .jsonl 文件</el-button>
-        </el-col>
-        <el-col :span="16">
+          <input type="file" accept=".jsonl" @change="(e:any)=>{form.traceFile=e.target?.files?.[0]||null; form.traceName=e.target?.files?.[0]?.name||''}" ref="trRef" style="display:none" />
+          <div class="quick-row">
+            <el-button @click="($refs.trRef as any)?.click()">选择 .jsonl 文件</el-button>
+            <el-button @click="($refs.mfRef as any)?.click()" :loading="loading.uploadManifest">上传 Manifest</el-button>
+          </div>
           <el-tag v-if="form.traceName" type="success">{{ form.traceName }}</el-tag>
-          <span v-else style="color:#999;">未选择</span>
-        </el-col>
-      </el-row>
-    </el-card>
+          <div v-if="selectedQuestion" class="muted-line">
+            Baseline: {{ selectedQuestion.baseline_tool_count }} 工具 / {{ selectedQuestion.baseline_tokens }} tokens / {{ selectedQuestion.baseline_time_ms }} ms
+          </div>
+        </div>
 
-    <!-- Step 4: Run -->
-    <el-card style="margin-bottom:16px;background:#f0f9ff;">
-      <el-row align="middle">
-        <el-col :span="12">
+        <div class="run-actions">
+          <el-checkbox v-model="form.useJudge">启用 Judge (DeepSeek)</el-checkbox>
           <el-button type="primary" size="large" @click="runEval" :loading="running" :disabled="!canRun">
             开始评测
           </el-button>
-          <el-checkbox v-model="form.useJudge" style="margin-left:12px;">启用裁判模型 (DeepSeek)</el-checkbox>
-        </el-col>
-        <el-col :span="12" style="text-align:right;">
-          <span v-if="error.eval" style="color:#f56c6c;">{{ error.eval }}</span>
-        </el-col>
-      </el-row>
-    </el-card>
+        </div>
+        <el-alert v-if="error.eval" :title="error.eval" type="error" :closable="false" show-icon />
+        <el-alert v-if="uploadMsg" :title="uploadMsg" type="success" :closable="false" show-icon />
+        <el-alert v-if="error.manifests" :title="error.manifests" type="warning" :closable="false" show-icon />
+      </el-card>
+
+      <el-card class="run-panel" shadow="never">
+        <template #header><b>目录预检</b></template>
+        <div class="check-list">
+          <div v-for="item in directoryChecks" :key="item.label" class="check-item">
+            <el-icon :class="item.ok ? 'ok' : 'pending'"><CircleCheckFilled /></el-icon>
+            <div>
+              <b>{{ item.label }}</b>
+              <span>{{ item.value }}</span>
+            </div>
+          </div>
+        </div>
+        <el-divider />
+        <el-steps :active="stepActive" finish-status="success" align-center>
+          <el-step title="目录" />
+          <el-step title="Trace" />
+          <el-step title="评分" />
+          <el-step title="完成" />
+        </el-steps>
+      </el-card>
+    </section>
 
     <!-- Result -->
-    <el-card v-if="lastResult" style="border:2px solid #409eff;margin-bottom:16px;">
+    <el-card v-if="lastResult" class="result-card" shadow="never">
       <template #header>
         <b>📋 {{ lastResult.run_label || lastResult.question_name || lastResult.question_id }}</b>
         <el-tag size="small" style="margin-left:8px;" type="info">{{ lastResult.difficulty }}</el-tag>
         <el-tag size="small" style="margin-left:4px;" v-if="lastResult.skills">Skill: {{ lastResult.skills }}</el-tag>
         <el-tag size="small" style="margin-left:4px;" v-if="lastResult.score_count != null">Scores: {{ lastResult.score_count }}</el-tag>
       </template>
+
+      <div v-if="lastResult.score_count != null" class="offline-summary">
+        <div>
+          <span>Run ID</span>
+          <b>{{ lastResult.run_id?.substring(0, 8) }}</b>
+        </div>
+        <div>
+          <span>Benchmark</span>
+          <b>{{ lastResult.benchmark_id }}</b>
+        </div>
+        <div>
+          <span>Scores</span>
+          <b>{{ lastResult.score_count }}</b>
+        </div>
+        <div>
+          <span>Judge</span>
+          <b>{{ lastResult.judge_enabled ? 'enabled' : 'disabled' }}</b>
+        </div>
+      </div>
 
       <!-- T1 Comparison -->
       <el-alert v-if="lastResult.t1_comparison" :title="t1Title" :type="t1Type" :closable="false" show-icon style="margin-bottom:12px;">
@@ -108,7 +140,7 @@
       </el-alert>
 
       <!-- Baseline vs Actual -->
-      <el-table :data="compareRows" size="small" border>
+      <el-table v-if="lastResult.scores" :data="compareRows" size="small" border>
         <el-table-column prop="metric" label="指标" width="120" />
         <el-table-column prop="baseline" label="Baseline (基准)" width="150" />
         <el-table-column prop="actual" label="实际" width="150" />
@@ -117,9 +149,9 @@
         </el-table-column>
       </el-table>
 
-      <el-divider />
+      <el-divider v-if="lastResult.scores" />
       <!-- TTTEC Scores -->
-      <el-row :gutter="12">
+      <el-row v-if="lastResult.scores" :gutter="12">
         <el-col :span="4" v-for="d in scoreDims" :key="d.key">
           <div style="text-align:center;padding:8px;">
             <div style="font-size:26px;font-weight:bold;" :style="{color:d.color}">{{ d.val }}</div>
@@ -157,8 +189,13 @@
     </el-card>
 
     <!-- History -->
-    <el-card>
-      <template #header><b>📋 评测历史</b></template>
+    <el-card class="history-card" shadow="never">
+      <template #header>
+        <div class="card-title">
+          <b>评测历史</b>
+          <el-button size="small" @click="loadData" :loading="loading.manifests">刷新</el-button>
+        </div>
+      </template>
       <el-table :data="runs" empty-text="暂无评测记录" size="small" max-height="300">
         <el-table-column label="Run" width="100">
           <template #default="{row}">
@@ -202,6 +239,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { CircleCheckFilled } from '@element-plus/icons-vue'
 
 const router = useRouter()
 
@@ -234,6 +272,37 @@ const canRun = computed(() => {
 })
 
 const selectedQuestion = computed(() => questions.value.find((q:any) => q.question_id === form.question_id))
+const completedRuns = computed(() => runs.value.filter((run:any) => run.status === 'COMPLETED').length)
+const latestRunLabel = computed(() => {
+  const latest = runs.value[0]
+  return latest?.run_label || latest?.id?.substring(0, 8) || '-'
+})
+const previewQuestion = computed(() => {
+  if (form.mode === 'single') return form.question_id || '{qid}'
+  return 'alarm_analysis-0003'
+})
+const directoryChecks = computed(() => {
+  if (form.mode === 'offline') {
+    return [
+      { label: 'Benchmark Root', value: form.benchmarkRoot || '未填写', ok: Boolean(form.benchmarkRoot) },
+      { label: 'Run Label', value: form.runLabel || '未填写', ok: Boolean(form.runLabel) },
+      { label: 'Trace Path', value: `runs/${form.runLabel || '{label}'}/${previewQuestion.value}/attempt-1/trace.jsonl`, ok: Boolean(form.runLabel) },
+      { label: 'Output Dir', value: `runs/${form.runLabel || '{label}'}/${previewQuestion.value}/attempt-1/输出结果`, ok: Boolean(form.runLabel) },
+    ]
+  }
+  return [
+    { label: 'Manifest', value: form.benchmark_id || '未选择', ok: Boolean(form.benchmark_id) },
+    { label: 'Question', value: form.question_id || '未选择', ok: Boolean(form.question_id) },
+    { label: 'Trace File', value: form.traceName || '未选择', ok: Boolean(form.traceFile) },
+    { label: 'Mode', value: '单 Trace 调试', ok: true },
+  ]
+})
+const stepActive = computed(() => {
+  if (running.value) return 2
+  if (lastResult.value) return 4
+  if (canRun.value) return 1
+  return 0
+})
 
 const t1Type = computed(() => {
   const c = lastResult.value?.t1_comparison
@@ -297,6 +366,11 @@ function onBenchmarkChange(bid: string) {
   const m = manifests.value.find((x:any) => x.benchmark_id === bid)
   questions.value = m?.questions || []
   form.question_id = ''
+}
+
+function useDemoBundle() {
+  form.benchmarkRoot = '../evaluations/industrial-demo'
+  form.runLabel = 'alarm-with-skill'
 }
 
 async function loadData() {
@@ -391,3 +465,197 @@ async function deleteRun(runId: string) {
 
 onMounted(loadData)
 </script>
+
+<style scoped>
+.dashboard-shell {
+  max-width: 1280px;
+  margin: 0 auto;
+  text-align: left;
+}
+
+.dashboard-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(360px, 0.8fr);
+  gap: 24px;
+  align-items: stretch;
+  margin-bottom: 20px;
+}
+
+.dashboard-hero h1 {
+  margin: 4px 0 8px;
+  font-size: 34px;
+  line-height: 1.15;
+  letter-spacing: 0;
+  font-weight: 650;
+}
+
+.eyebrow {
+  color: #5b6b83;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.hero-copy {
+  color: #667085;
+  font-size: 15px;
+}
+
+.hero-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.hero-metrics > div {
+  background: #fff;
+  border: 1px solid #e6e8ef;
+  border-radius: 8px;
+  padding: 18px;
+  min-width: 0;
+}
+
+.hero-metrics span {
+  display: block;
+  color: #172033;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hero-metrics small {
+  color: #7a8495;
+}
+
+.workspace-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(380px, 0.85fr);
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.run-panel,
+.result-card,
+.history-card {
+  border-radius: 8px;
+}
+
+.card-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.form-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.quick-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.muted-line {
+  color: #7a8495;
+  font-size: 13px;
+}
+
+.run-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 18px;
+  gap: 12px;
+}
+
+.check-list {
+  display: grid;
+  gap: 12px;
+}
+
+.check-item {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+}
+
+.check-item b,
+.check-item span {
+  display: block;
+}
+
+.offline-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.offline-summary > div {
+  border: 1px solid #e8ebf2;
+  border-radius: 8px;
+  padding: 14px;
+  background: #fbfcff;
+  min-width: 0;
+}
+
+.offline-summary span,
+.offline-summary b {
+  display: block;
+}
+
+.offline-summary span {
+  color: #788397;
+  font-size: 12px;
+}
+
+.offline-summary b {
+  color: #20283a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.check-item b {
+  color: #2b3345;
+  font-size: 13px;
+}
+
+.check-item span {
+  color: #687386;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.ok {
+  color: #17a36b;
+}
+
+.pending {
+  color: #b8c0cc;
+}
+
+@media (max-width: 960px) {
+  .dashboard-hero,
+  .workspace-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .offline-summary {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+</style>
