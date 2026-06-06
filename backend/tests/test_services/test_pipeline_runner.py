@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, patch
 from src.services.pipeline_runner import PipelineRunner
 from src.core.schemas import (
     EvaluationInput,
+    JudgeResult,
     Manifest,
     QuestionItem,
     EvalConfig,
@@ -151,4 +152,47 @@ async def test_execute_offline_run_uses_evaluation_inputs(mock_run_repo, manifes
     status_calls = [c.args[1] for c in mock_run_repo.update_status.call_args_list]
     assert RunStatus.PARSING_TRACE in status_calls
     assert RunStatus.EVALUATING_BASELINE in status_calls
+    assert RunStatus.COMPLETED in status_calls
+
+
+@pytest.mark.asyncio
+async def test_execute_offline_run_invokes_judge_and_fusion(mock_run_repo, manifest, tmp_path):
+    trace_path = tmp_path / "trace.jsonl"
+    trace_path.write_text('{"type":"result","status":"success"}\n', encoding="utf-8")
+    item = EvaluationInput(
+        question=manifest.questions[0],
+        trace_path=trace_path,
+        output_dir=tmp_path / "输出结果",
+        reference_paths=[],
+    )
+    run_id = uuid4()
+    baseline_score = ScoreResult(run_id=run_id, question_id=item.question_id, overall_score=50.0)
+    fused_score = ScoreResult(run_id=run_id, question_id=item.question_id, overall_score=85.0)
+    judge_result = JudgeResult(run_id=run_id, question_id=item.question_id, task_completion=90)
+
+    baseline = AsyncMock()
+    baseline.evaluate_input = AsyncMock(return_value=baseline_score)
+    judge = AsyncMock()
+    judge.evaluate = AsyncMock(return_value=ScoreResult(run_id=run_id, question_id=item.question_id))
+    judge_repo = AsyncMock()
+    judge_repo.get_by_run_and_question = AsyncMock(return_value=judge_result)
+    fusion = AsyncMock()
+    fusion.fuse = AsyncMock(return_value=fused_score)
+
+    runner = PipelineRunner(
+        run_repo=mock_run_repo,
+        baseline_evaluator=baseline,
+        judge_evaluator=judge,
+        fusion_service=fusion,
+        judge_repo=judge_repo,
+    )
+
+    scores = await runner.execute_offline_run(run_id, [item], judge_enabled=True)
+
+    assert scores == [fused_score]
+    judge.evaluate.assert_called_once()
+    fusion.fuse.assert_called_once_with(baseline_score, judge_result)
+    status_calls = [c.args[1] for c in mock_run_repo.update_status.call_args_list]
+    assert RunStatus.AWAITING_JUDGE in status_calls
+    assert RunStatus.EVALUATING_JUDGE in status_calls
     assert RunStatus.COMPLETED in status_calls

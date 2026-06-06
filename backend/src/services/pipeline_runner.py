@@ -195,4 +195,46 @@ class PipelineRunner:
         trace_map: dict,
         baseline_scores: list[ScoreResult],
     ) -> list[ScoreResult]:
-        return baseline_scores
+        baseline_by_key = {
+            (score.question_id, score.attempt_index): score
+            for score in baseline_scores
+        }
+        tasks = []
+        for item in evaluation_inputs:
+            tasks.append(
+                self._judge_and_fuse_single(run_id, item, trace_map, baseline_by_key)
+            )
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        scores: list[ScoreResult] = []
+        for result in results:
+            if isinstance(result, Exception):
+                raise result
+            scores.append(result)
+        return scores
+
+    async def _judge_and_fuse_single(
+        self,
+        run_id: UUID,
+        item,
+        trace_map: dict,
+        baseline_by_key: dict,
+    ) -> ScoreResult:
+        key = (item.question_id, item.attempt_index)
+        baseline = baseline_by_key[key]
+
+        async with self.judge_semaphore:
+            await self.judge_evaluator.evaluate(
+                run_id=run_id,
+                question=item.question,
+                trace_data=trace_map[key],
+            )
+
+        judge_result = await self.judge_repo.get_by_run_and_question(
+            run_id, item.question_id
+        )
+        if judge_result is None or self.fusion_service is None:
+            baseline.is_partial_score = True
+            return baseline
+
+        return await self.fusion_service.fuse(baseline, judge_result)
