@@ -10,9 +10,10 @@ class MetaAnalyzer:
     """Computes pass@k/pass^k metrics and extracts common issues from judge results."""
 
     def __init__(self, pass_threshold: float | None = None):
-        self.pass_threshold = pass_threshold or float(
+        threshold = pass_threshold or float(
             os.getenv("PASS_THRESHOLD", "60")
         )
+        self.pass_threshold = threshold * 100 if 0 < threshold <= 1 else threshold
 
     def compute_pass_rates(
         self,
