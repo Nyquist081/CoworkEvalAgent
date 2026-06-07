@@ -3,8 +3,8 @@
     <el-header class="app-header">
       <h2 @click="goHome">CoworkEval</h2>
       <nav class="app-menu">
-        <button :class="{ active: route.path === '/' }" @click="router.push('/')">评测操作台</button>
-        <button :class="{ active: route.path === '/compare' }" @click="router.push('/compare')">版本对比</button>
+        <button :class="{ active: route.path === '/' }" @click="goHome">评测操作台</button>
+        <button :class="{ active: route.path === '/compare' }" @click="goCompare">版本对比</button>
       </nav>
     </el-header>
     <el-main class="app-main">
@@ -18,6 +18,7 @@ import { useRoute, useRouter } from 'vue-router'
 const route = useRoute()
 const router = useRouter()
 function goHome() { router.push({name:'dashboard'}).catch(()=>{window.location.href='/'}) }
+function goCompare() { window.location.href = '/compare' }
 </script>
 
 <style scoped>

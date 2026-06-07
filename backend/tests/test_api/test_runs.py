@@ -121,3 +121,17 @@ def test_evaluate_run_delegates_scoring_to_pipeline():
     assert trace_data == [{"type": "result", "status": "success"}]
     assert pipeline.execute_single_input.call_args.kwargs["judge_enabled"] is True
     assert response.json()["scores"]["overall_score"] == 98.0
+
+
+def test_scores_summary_route_is_not_shadowed():
+    run = TaskRun(benchmark_id="bench-1")
+    score = ScoreResult(run_id=run.id, question_id="q-1", overall_score=88.0)
+
+    with patch("src.api.scores.ScoreRepositoryImpl") as repo_cls:
+        repo = repo_cls.return_value
+        repo.list_by_run = AsyncMock(return_value=[score])
+
+        response = client.get(f"/coworkeval/v1/runs/{run.id}/scores/summary")
+
+    assert response.status_code == 200
+    assert response.json()["overall_avg"] == 88.0

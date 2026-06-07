@@ -60,7 +60,10 @@
             <b>跑一组无 Skill / 有 Skill 对照</b>
             <span>平台会先生成 baseline，再生成启用 Skill 的版本，最后自动评测并跳转多版本对比。</span>
           </div>
-          <el-button @click="useSkillABDemo">填入对照示例</el-button>
+          <div class="button-row tight">
+            <el-button @click="useSkillABDemo">填入演示示例</el-button>
+            <el-button type="primary" plain @click="useClaudeSecurityDemo">填入 Claude 安全 Demo</el-button>
+          </div>
         </div>
 
         <div v-if="form.mode === 'demo' || form.mode === 'offline'" class="field-grid">
@@ -423,6 +426,17 @@ function useSkillABDemo() {
   form.skillRunLabel = 'alarm-with-skill'
   form.model = 'demo'
   form.skillVersion = 'alarm_analysis@demo'
+}
+
+function useClaudeSecurityDemo() {
+  form.mode = 'skillab'
+  form.benchmarkRoot = '../evaluations/skill-demo-pack'
+  form.preset = 'claude-code'
+  form.baselineRunLabel = 'security-baseline-no-skill'
+  form.skillRunLabel = 'security-with-skill'
+  form.model = 'haiku'
+  form.skillVersion = 'security_review@v1'
+  form.useJudge = false
 }
 
 function handleTraceSelect(event: Event) {

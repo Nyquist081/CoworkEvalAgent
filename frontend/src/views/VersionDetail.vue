@@ -2,7 +2,10 @@
   <div class="detail-shell">
     <div class="topbar">
       <el-button @click="goBack">返回评测操作台</el-button>
-      <el-button @click="goCompare">加入版本对比</el-button>
+      <div class="top-actions">
+        <el-button @click="goMeta">查看共性分析</el-button>
+        <el-button @click="goCompare">加入版本对比</el-button>
+      </div>
     </div>
 
     <section class="summary-panel">
@@ -150,11 +153,15 @@ function scoreType(value?: number) {
 }
 
 function goBack() {
-  window.location.assign(router.resolve({ name: 'dashboard' }).href)
+  window.location.href = router.resolve({ name: 'dashboard' }).href
 }
 
 function goCompare() {
-  router.push({ path: '/compare', query: { runs: runId.value } })
+  window.location.href = `/compare?runs=${encodeURIComponent(runId.value)}`
+}
+
+function goMeta() {
+  window.location.href = `/meta/${encodeURIComponent(runId.value)}`
 }
 
 async function load() {
@@ -185,6 +192,12 @@ onMounted(load)
   justify-content: space-between;
   gap: 12px;
   align-items: center;
+}
+
+.top-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .summary-panel {

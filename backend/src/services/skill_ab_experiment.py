@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import shlex
 import shutil
 import subprocess
@@ -197,6 +198,19 @@ class SkillABExperimentService:
             command = os.getenv("COWORKEVAL_CLAUDE_CODE_COMMAND")
             if command:
                 return command
+            budget = os.getenv("COWORKEVAL_CLAUDE_MAX_BUDGET_USD", "0.5")
+            wrapper = Path(__file__).resolve().parents[3] / "scripts" / "claude_sidecar_wrapper.py"
+            if wrapper.exists():
+                return (
+                    f"{shlex.quote(sys.executable)} {shlex.quote(str(wrapper))} "
+                    "--prompt-file {prompt_file} "
+                    "--output-dir {output_dir} "
+                    "--trace-path {trace_path} "
+                    "--skill-mode {skill_mode} "
+                    "--skill-path {skill_path} "
+                    "--model {model} "
+                    f"--max-budget-usd {shlex.quote(budget)}"
+                )
         raise ValueError(
             f"Agent preset '{preset}' is not configured. Set {env_name} in backend .env."
         )
@@ -262,12 +276,13 @@ class SkillABExperimentService:
                 shutil.copy2(src, dst)
 
         command = command_template.format(
-            workdir=str(workdir),
-            prompt_file=str(prompt_file),
-            output_dir=str(output_dir),
-            trace_path=str(trace_path),
+            workdir=str(workdir.resolve()),
+            prompt_file=str(prompt_file.resolve()),
+            output_dir=str(output_dir.resolve()),
+            trace_path=str(trace_path.resolve()),
             skill_mode=skill_mode,
-            skill_path=str(skill_path),
+            skill_path=str(skill_path.resolve()),
+            model=spec.model or "haiku",
         )
         started = time.monotonic()
         completed = subprocess.run(

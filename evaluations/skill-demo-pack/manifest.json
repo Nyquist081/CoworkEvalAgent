@@ -1,0 +1,36 @@
+{
+  "benchmark_id": "skill-demo-pack",
+  "name": "Skill A/B 小型 Demo 集",
+  "version": "1.0.0",
+  "created_at": "2026-06-07T00:00:00+08:00",
+  "created_by": "eval-platform",
+  "description": "用于真实 Claude Code 无 Skill / 有 Skill 对照实验的小型任务集。",
+  "total_questions": 1,
+  "questions": [
+    {
+      "question_id": "security-review-0001",
+      "question_name": "登录下载接口安全审计",
+      "category": "安全审计",
+      "difficulty": "入门",
+      "prompt_file": "security-review-0001/prompt.txt",
+      "input_files": [
+        "security-review-0001/输入文件/app.py"
+      ],
+      "reference_files": [],
+      "output_dir": "security-review-0001/输出结果/",
+      "eval_config": {
+        "compare_style": false,
+        "ignore_rules": [],
+        "fatal_rules": []
+      },
+      "scene": "skills",
+      "skills": "security_review",
+      "payload_size_kb": 8.0,
+      "baseline_tokens": 120000,
+      "baseline_rounds": 8,
+      "baseline_tool_count": 6,
+      "baseline_time_ms": 60000,
+      "baseline_cost_usd": 0.25
+    }
+  ]
+}
