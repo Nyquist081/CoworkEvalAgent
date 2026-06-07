@@ -88,6 +88,42 @@ def test_wrapper_runs_claude_and_writes_platform_trace(tmp_path):
     assert (output_dir / "claude_response.md").read_text(encoding="utf-8").startswith("FINAL REPORT")
 
 
+def test_wrapper_uses_claude_default_model_when_model_is_not_set(tmp_path):
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    _write_fake_claude(fake_bin / "claude")
+
+    prompt_file = tmp_path / "prompt.txt"
+    prompt_file.write_text("Inspect the tiny project.", encoding="utf-8")
+    args_path = tmp_path / "args.json"
+
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}{os.pathsep}{env['PATH']}"
+    env["FAKE_CLAUDE_ARGS_PATH"] = str(args_path)
+
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(WRAPPER),
+            "--prompt-file",
+            str(prompt_file),
+            "--output-dir",
+            str(tmp_path / "out"),
+            "--trace-path",
+            str(tmp_path / "trace.jsonl"),
+        ],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    args = json.loads(args_path.read_text(encoding="utf-8"))
+    assert "--model" not in args
+
+
 def test_wrapper_does_not_overwrite_agent_created_response_file(tmp_path):
     fake_bin = tmp_path / "bin"
     fake_bin.mkdir()

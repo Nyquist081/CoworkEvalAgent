@@ -18,7 +18,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--trace-path", required=True)
     parser.add_argument("--skill-mode", choices=("no_skill", "with_skill"), default="no_skill")
     parser.add_argument("--skill-path", default="")
-    parser.add_argument("--model", default="haiku")
+    parser.add_argument("--model", default="")
     parser.add_argument("--max-budget-usd", default="0.5")
     parser.add_argument("--claude-bin", default="claude")
     return parser.parse_args()
@@ -170,8 +170,6 @@ def main() -> int:
     command = [
         args.claude_bin,
         "-p",
-        "--model",
-        args.model,
         "--output-format",
         "text",
         "--no-session-persistence",
@@ -183,6 +181,8 @@ def main() -> int:
         system_prompt,
         user_prompt,
     ]
+    if args.model:
+        command[2:2] = ["--model", args.model]
 
     started = time.monotonic()
     completed = subprocess.run(command, capture_output=True, text=True, check=False)
@@ -205,7 +205,7 @@ def main() -> int:
         trace_path,
         status="success" if completed.returncode == 0 else "error",
         skill_mode=args.skill_mode,
-        model=args.model,
+        model=args.model or "claude-code-default",
         prompt_file=prompt_file,
         stdout=completed.stdout,
         stderr=completed.stderr,

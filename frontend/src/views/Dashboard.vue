@@ -5,7 +5,7 @@
         <p class="eyebrow">评测操作台</p>
         <h1>评测本地 Agent</h1>
         <p class="hero-copy">
-          用本机 Claude Code 或已有 Trace 跑离线评测。模型、Key、预算都由后端配置管理，浏览器只负责选择任务和查看结果。
+          用本机 Claude Code 或已有 Trace 跑离线评测。浏览器只负责选择任务和查看结果；模型与 Key 由本机 Claude 或后端配置管理。
         </p>
       </div>
       <div class="stat-grid">
@@ -84,7 +84,7 @@
           <label>
             <span>本地执行器</span>
             <el-input :model-value="agentRuntimeLabel" disabled />
-            <small>模型、预算、Claude 命令和 Key 都在后端配置或本机 Claude CLI 中管理。</small>
+            <small>不在浏览器填写模型或 Key；默认使用本机 Claude Code 配置，后端可按需覆盖模型和预算。</small>
           </label>
           <label>
             <span>无 Skill 版本名</span>
@@ -100,7 +100,7 @@
 
         <div v-if="form.mode === 'skillab'" class="config-note">
           <b>配置边界</b>
-          <span>浏览器不会接触模型 Key。Claude Code 使用本机登录状态；Judge 使用后端 `LLM_*` 配置；Agent 模型使用后端 `COWORKEVAL_CLAUDE_MODEL`。</span>
+          <span>浏览器不会接触模型 Key。Claude Code 默认使用本机登录状态和本机默认模型；如果后端设置了 `COWORKEVAL_CLAUDE_MODEL`，才会覆盖模型。Judge 使用后端 `LLM_*` 配置。</span>
         </div>
 
         <div v-if="form.mode === 'single'" class="field-grid">
@@ -353,7 +353,7 @@ const readinessChecks = computed(() => {
     return [
       { label: '评测集目录', value: form.benchmarkRoot || '请输入目录', ok: Boolean(form.benchmarkRoot) },
       { label: '本地执行器', value: agentRuntimeLabel.value, ok: Boolean(form.preset) },
-      { label: '模型与 Key', value: '全部由后端配置或本机 Claude CLI 管理', ok: true },
+      { label: '模型与 Key', value: '默认使用本机 Claude Code 配置，浏览器不接触 Key', ok: true },
       { label: '对照组', value: form.baselineRunLabel || '请输入无 Skill 版本名', ok: Boolean(form.baselineRunLabel) },
       { label: '实验组', value: form.skillRunLabel || '请输入有 Skill 版本名', ok: Boolean(form.skillRunLabel) },
       { label: '版本名检查', value: form.baselineRunLabel === form.skillRunLabel ? '两个版本名不能相同' : '两个版本会分开保存', ok: form.baselineRunLabel !== form.skillRunLabel },

@@ -20,7 +20,7 @@ def test_claude_code_preset_uses_builtin_wrapper_when_env_is_absent(monkeypatch)
     assert command.startswith(sys.executable)
     assert "scripts/claude_sidecar_wrapper.py" in command
     assert "--skill-mode {skill_mode}" in command
-    assert "--model {model}" in command
+    assert "{model_args}" in command
     assert "--max-budget-usd 0.5" in command
 
 
@@ -45,7 +45,15 @@ def test_claude_code_model_defaults_in_backend(monkeypatch):
     monkeypatch.delenv("COWORKEVAL_CLAUDE_MODEL", raising=False)
     service = SkillABExperimentService(pipeline_factory=lambda: object())
 
-    assert service._agent_model("claude-code") == "haiku"
+    assert service._agent_model("claude-code") == ""
+    assert service._agent_model_args("claude-code") == ""
+
+
+def test_claude_code_model_args_are_only_added_when_env_is_set(monkeypatch):
+    monkeypatch.setenv("COWORKEVAL_CLAUDE_MODEL", "sonnet")
+    service = SkillABExperimentService(pipeline_factory=lambda: object())
+
+    assert service._agent_model_args("claude-code") == "--model sonnet"
 
 
 def test_question_command_passes_absolute_paths_when_workdir_changes(tmp_path, monkeypatch):

@@ -207,7 +207,7 @@ class SkillABExperimentService:
                     "--trace-path {trace_path} "
                     "--skill-mode {skill_mode} "
                     "--skill-path {skill_path} "
-                    "--model {model} "
+                    "{model_args} "
                     f"--max-budget-usd {shlex.quote(budget)}"
                 )
         raise ValueError(
@@ -216,10 +216,16 @@ class SkillABExperimentService:
 
     def _agent_model(self, preset: str) -> str:
         if preset == "claude-code":
-            return os.getenv("COWORKEVAL_CLAUDE_MODEL", "haiku")
+            return os.getenv("COWORKEVAL_CLAUDE_MODEL", "").strip()
         if preset == "mock-demo":
             return "demo"
         return os.getenv(f"COWORKEVAL_{preset.upper().replace('-', '_')}_MODEL", preset)
+
+    def _agent_model_args(self, preset: str) -> str:
+        model = self._agent_model(preset)
+        if not model:
+            return ""
+        return f"--model {shlex.quote(model)}"
 
     def _run_command_label(
         self,
@@ -246,7 +252,7 @@ class SkillABExperimentService:
             run_label,
             {
                 "agent_name": spec.preset,
-                "model": self._agent_model(spec.preset),
+                "model": self._agent_model(spec.preset) or "claude-code-default",
                 "skill_version": "none" if skill_mode == "no_skill" else spec.skill_version,
                 "source": "sidecar",
             },
@@ -288,7 +294,7 @@ class SkillABExperimentService:
             trace_path=str(trace_path.resolve()),
             skill_mode=skill_mode,
             skill_path=str(skill_path.resolve()),
-            model=self._agent_model(spec.preset),
+            model_args=self._agent_model_args(spec.preset),
         )
         started = time.monotonic()
         completed = subprocess.run(
