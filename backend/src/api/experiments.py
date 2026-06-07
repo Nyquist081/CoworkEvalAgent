@@ -17,11 +17,10 @@ router = APIRouter(prefix="/experiments")
 
 class SkillABExperimentRequest(BaseModel):
     benchmark_root: str
-    preset: str = "mock-demo"
-    baseline_run_label: str = "baseline-no-skill"
-    skill_run_label: str = "alarm-with-skill"
+    preset: str = "claude-code"
+    baseline_run_label: str = "security-baseline-no-skill"
+    skill_run_label: str = "security-with-skill"
     judge_enabled: bool = False
-    model: str = ""
     skill_version: str = ""
 
 
@@ -40,7 +39,6 @@ async def run_skill_ab_experiment(request: SkillABExperimentRequest):
                 baseline_run_label=request.baseline_run_label,
                 skill_run_label=request.skill_run_label,
                 judge_enabled=request.judge_enabled,
-                model=request.model,
                 skill_version=request.skill_version,
             )
         )

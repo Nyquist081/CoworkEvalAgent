@@ -3,9 +3,9 @@
     <section class="hero-panel">
       <div>
         <p class="eyebrow">评测操作台</p>
-        <h1>开始一次 Agent 评测</h1>
+        <h1>评测本地 Agent</h1>
         <p class="hero-copy">
-          选择一个已准备好的评测目录，点击开始，就能生成版本记录和评分结果。
+          用本机 Claude Code 或已有 Trace 跑离线评测。模型、Key、预算都由后端配置管理，浏览器只负责选择任务和查看结果。
         </p>
       </div>
       <div class="stat-grid">
@@ -29,44 +29,40 @@
         <template #header>
           <div class="section-head">
             <div>
-              <b>新手评测向导</b>
-              <small>不需要理解 Trace 或目录细节，按步骤填写即可。</small>
+              <b>选择要做的事</b>
+              <small>每个入口只做一类工作，避免把运行 Agent 和评测已有结果混在一起。</small>
             </div>
             <el-radio-group v-model="form.mode" size="small">
-              <el-radio-button label="demo">快速体验</el-radio-button>
-              <el-radio-button label="skillab">Skill 对照实验</el-radio-button>
-              <el-radio-button label="offline">评测自己的结果</el-radio-button>
-              <el-radio-button label="single">单文件调试</el-radio-button>
+              <el-radio-button label="skillab">运行本地 Agent</el-radio-button>
+              <el-radio-button label="offline">评测已有 runs</el-radio-button>
+              <el-radio-button label="single">单 Trace 调试</el-radio-button>
             </el-radio-group>
           </div>
         </template>
 
         <el-steps :active="wizardStep" finish-status="success" class="wizard-steps">
-          <el-step title="选择数据" description="Demo 或评测目录" />
-          <el-step title="确认设置" description="版本名和 Judge" />
+          <el-step title="选择任务" description="本地 Agent 或已有结果" />
+          <el-step title="确认范围" description="目录、版本名、Judge" />
           <el-step title="查看结果" description="生成评分记录" />
         </el-steps>
 
-        <div v-if="form.mode === 'demo'" class="mode-card">
-          <div class="mode-copy">
-            <b>先跑一个内置示例</b>
-            <span>适合第一次打开平台时验证完整流程。系统会使用仓库里的工业告警分析样例。</span>
-          </div>
-          <el-button @click="useDemoBundle">填入示例</el-button>
-        </div>
-
         <div v-if="form.mode === 'skillab'" class="mode-card compare-mode">
           <div class="mode-copy">
-            <b>跑一组无 Skill / 有 Skill 对照</b>
-            <span>平台会先生成 baseline，再生成启用 Skill 的版本，最后自动评测并跳转多版本对比。</span>
+            <b>调用本机 Claude Code 跑 A/B 对照</b>
+            <span>后端会调用本机 Agent 两次：一次不加载 Skill，一次加载评测目录里的 Skill，然后自动评分并生成对比。</span>
           </div>
-          <div class="button-row tight">
-            <el-button @click="useSkillABDemo">填入演示示例</el-button>
-            <el-button type="primary" plain @click="useClaudeSecurityDemo">填入 Claude 安全 Demo</el-button>
-          </div>
+          <el-button type="primary" plain @click="useClaudeSecurityDemo">填入安全审计 Demo</el-button>
         </div>
 
-        <div v-if="form.mode === 'demo' || form.mode === 'offline'" class="field-grid">
+        <div v-if="form.mode === 'offline'" class="mode-card">
+          <div class="mode-copy">
+            <b>只评测已经存在的 runs 目录</b>
+            <span>不会调用 Agent。适合你已经有 trace.jsonl 和输出结果，只想让平台重新打分。</span>
+          </div>
+          <el-button @click="useDemoBundle">填入已有结果示例</el-button>
+        </div>
+
+        <div v-if="form.mode === 'offline'" class="field-grid">
           <label>
             <span>评测集目录</span>
             <el-input v-model="form.benchmarkRoot" placeholder="../evaluations/industrial-demo" />
@@ -82,16 +78,13 @@
         <div v-if="form.mode === 'skillab'" class="field-grid">
           <label>
             <span>评测集目录</span>
-            <el-input v-model="form.benchmarkRoot" placeholder="../evaluations/industrial-demo" />
-            <small>目录里应包含 manifest.json；实验结果会写入 runs 文件夹。</small>
+            <el-input v-model="form.benchmarkRoot" placeholder="../evaluations/skill-demo-pack" />
+            <small>目录里应包含 manifest.json、任务文件和 skills 目录；运行结果会写入 runs。</small>
           </label>
           <label>
-            <span>执行预设</span>
-            <el-select v-model="form.preset">
-              <el-option label="演示预设：立即生成样例" value="mock-demo" />
-              <el-option label="Claude Code：使用后端配置" value="claude-code" />
-            </el-select>
-            <small>真实 Claude 命令只从后端配置读取，浏览器不能传任意命令。</small>
+            <span>本地执行器</span>
+            <el-input :model-value="agentRuntimeLabel" disabled />
+            <small>模型、预算、Claude 命令和 Key 都在后端配置或本机 Claude CLI 中管理。</small>
           </label>
           <label>
             <span>无 Skill 版本名</span>
@@ -103,14 +96,11 @@
             <el-input v-model="form.skillRunLabel" placeholder="alarm-with-skill" />
             <small>这是实验组，用来衡量 Skill 是否真的带来提升。</small>
           </label>
-          <label>
-            <span>模型名称</span>
-            <el-input v-model="form.model" placeholder="claude-code / deepseek / demo" />
-          </label>
-          <label>
-            <span>Skill 版本</span>
-            <el-input v-model="form.skillVersion" placeholder="alarm_analysis@v1" />
-          </label>
+        </div>
+
+        <div v-if="form.mode === 'skillab'" class="config-note">
+          <b>配置边界</b>
+          <span>浏览器不会接触模型 Key。Claude Code 使用本机登录状态；Judge 使用后端 `LLM_*` 配置；Agent 模型使用后端 `COWORKEVAL_CLAUDE_MODEL`。</span>
         </div>
 
         <div v-if="form.mode === 'single'" class="field-grid">
@@ -149,7 +139,7 @@
           <el-checkbox v-model="form.useJudge">
             启用 Judge 模型
           </el-checkbox>
-          <span>模型由后端配置控制，当前可使用 DeepSeek。</span>
+          <span>可选。Judge 只读取后端配置文件，例如 DeepSeek 的 `LLM_BASE_URL / LLM_API_KEY / LLM_MODEL`。</span>
         </div>
 
         <div class="action-strip">
@@ -300,14 +290,13 @@ const loading = reactive({ manifests: false, uploadManifest: false })
 const error = reactive({ manifests: '', eval: '' })
 
 const form = reactive({
-  mode: 'demo',
-  benchmarkRoot: '../evaluations/industrial-demo',
+  mode: 'skillab',
+  benchmarkRoot: '../evaluations/skill-demo-pack',
   runLabel: 'alarm-with-skill',
-  preset: 'mock-demo',
-  baselineRunLabel: 'baseline-no-skill',
-  skillRunLabel: 'alarm-with-skill',
-  model: '',
-  skillVersion: 'alarm_analysis@demo',
+  preset: 'claude-code',
+  baselineRunLabel: 'security-baseline-no-skill',
+  skillRunLabel: 'security-with-skill',
+  skillVersion: 'security_review@v1',
   benchmark_id: '',
   question_id: '',
   traceFile: null as File | null,
@@ -319,6 +308,10 @@ const completedRuns = computed(() => runs.value.filter((run: any) => run.status 
 const latestRunLabel = computed(() => runs.value[0]?.run_label || shortId(runs.value[0]?.id) || '-')
 const selectedQuestion = computed(() => questions.value.find((question: any) => question.question_id === form.question_id))
 const isPairResult = computed(() => Boolean(lastResult.value?.baseline && lastResult.value?.skill))
+const agentRuntimeLabel = computed(() => {
+  if (form.preset === 'claude-code') return 'Claude Code sidecar（后端配置）'
+  return '离线演示预设（不调用 Agent）'
+})
 const canRun = computed(() => {
   if (form.mode === 'single') return form.benchmark_id && form.question_id && form.traceFile
   if (form.mode === 'skillab') {
@@ -359,7 +352,8 @@ const readinessChecks = computed(() => {
   if (form.mode === 'skillab') {
     return [
       { label: '评测集目录', value: form.benchmarkRoot || '请输入目录', ok: Boolean(form.benchmarkRoot) },
-      { label: '执行预设', value: form.preset === 'mock-demo' ? '演示预设' : 'Claude Code 后端预设', ok: Boolean(form.preset) },
+      { label: '本地执行器', value: agentRuntimeLabel.value, ok: Boolean(form.preset) },
+      { label: '模型与 Key', value: '全部由后端配置或本机 Claude CLI 管理', ok: true },
       { label: '对照组', value: form.baselineRunLabel || '请输入无 Skill 版本名', ok: Boolean(form.baselineRunLabel) },
       { label: '实验组', value: form.skillRunLabel || '请输入有 Skill 版本名', ok: Boolean(form.skillRunLabel) },
       { label: '版本名检查', value: form.baselineRunLabel === form.skillRunLabel ? '两个版本名不能相同' : '两个版本会分开保存', ok: form.baselineRunLabel !== form.skillRunLabel },
@@ -413,19 +407,9 @@ function onBenchmarkChange(bid: string) {
 }
 
 function useDemoBundle() {
-  form.mode = 'demo'
+  form.mode = 'offline'
   form.benchmarkRoot = '../evaluations/industrial-demo'
   form.runLabel = 'alarm-with-skill'
-}
-
-function useSkillABDemo() {
-  form.mode = 'skillab'
-  form.benchmarkRoot = '../evaluations/industrial-demo'
-  form.preset = 'mock-demo'
-  form.baselineRunLabel = 'baseline-no-skill'
-  form.skillRunLabel = 'alarm-with-skill'
-  form.model = 'demo'
-  form.skillVersion = 'alarm_analysis@demo'
 }
 
 function useClaudeSecurityDemo() {
@@ -434,7 +418,6 @@ function useClaudeSecurityDemo() {
   form.preset = 'claude-code'
   form.baselineRunLabel = 'security-baseline-no-skill'
   form.skillRunLabel = 'security-with-skill'
-  form.model = 'haiku'
   form.skillVersion = 'security_review@v1'
   form.useJudge = false
 }
@@ -502,7 +485,6 @@ async function runEval() {
         baseline_run_label: form.baselineRunLabel,
         skill_run_label: form.skillRunLabel,
         judge_enabled: form.useJudge,
-        model: form.model,
         skill_version: form.skillVersion,
       })
       lastResult.value = res.data
@@ -692,6 +674,27 @@ label small,
 .mode-copy {
   display: grid;
   gap: 4px;
+}
+
+.config-note {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid #d7eadf;
+  border-radius: 8px;
+  background: #f5fbf7;
+}
+
+.config-note b {
+  color: #235c3b;
+  font-size: 13px;
+}
+
+.config-note span {
+  color: #52605a;
+  font-size: 13px;
+  line-height: 1.55;
 }
 
 .field-grid {

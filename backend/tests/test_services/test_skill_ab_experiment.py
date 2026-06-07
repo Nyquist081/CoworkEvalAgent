@@ -11,6 +11,7 @@ def test_claude_code_preset_uses_builtin_wrapper_when_env_is_absent(monkeypatch)
     monkeypatch.delenv("COWORKEVAL_AGENT_COMMAND_CLAUDE_CODE", raising=False)
     monkeypatch.delenv("COWORKEVAL_CLAUDE_CODE_COMMAND", raising=False)
     monkeypatch.delenv("COWORKEVAL_CLAUDE_MAX_BUDGET_USD", raising=False)
+    monkeypatch.delenv("COWORKEVAL_CLAUDE_MODEL", raising=False)
 
     service = SkillABExperimentService(pipeline_factory=lambda: object())
 
@@ -31,6 +32,20 @@ def test_claude_code_preset_respects_budget_env(monkeypatch):
     service = SkillABExperimentService(pipeline_factory=lambda: object())
 
     assert "--max-budget-usd 0.5" in service._command_template("claude-code")
+
+
+def test_claude_code_model_comes_from_backend_env(monkeypatch):
+    monkeypatch.setenv("COWORKEVAL_CLAUDE_MODEL", "sonnet")
+    service = SkillABExperimentService(pipeline_factory=lambda: object())
+
+    assert service._agent_model("claude-code") == "sonnet"
+
+
+def test_claude_code_model_defaults_in_backend(monkeypatch):
+    monkeypatch.delenv("COWORKEVAL_CLAUDE_MODEL", raising=False)
+    service = SkillABExperimentService(pipeline_factory=lambda: object())
+
+    assert service._agent_model("claude-code") == "haiku"
 
 
 def test_question_command_passes_absolute_paths_when_workdir_changes(tmp_path, monkeypatch):

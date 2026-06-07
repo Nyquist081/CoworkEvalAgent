@@ -26,7 +26,6 @@ class SkillABRunSpec:
     baseline_run_label: str
     skill_run_label: str
     judge_enabled: bool = False
-    model: str = ""
     skill_version: str = ""
 
 
@@ -125,7 +124,7 @@ class SkillABExperimentService:
             ),
             meta={
                 "agent_name": "mock-claude",
-                "model": spec.model or "demo-baseline",
+                "model": "demo-baseline",
                 "skill_version": "none",
                 "source": "sidecar",
             },
@@ -143,7 +142,7 @@ class SkillABExperimentService:
             ),
             meta={
                 "agent_name": "mock-claude",
-                "model": spec.model or "demo-with-skill",
+                "model": "demo-with-skill",
                 "skill_version": spec.skill_version or "alarm_analysis@demo",
                 "source": "sidecar",
             },
@@ -215,6 +214,13 @@ class SkillABExperimentService:
             f"Agent preset '{preset}' is not configured. Set {env_name} in backend .env."
         )
 
+    def _agent_model(self, preset: str) -> str:
+        if preset == "claude-code":
+            return os.getenv("COWORKEVAL_CLAUDE_MODEL", "haiku")
+        if preset == "mock-demo":
+            return "demo"
+        return os.getenv(f"COWORKEVAL_{preset.upper().replace('-', '_')}_MODEL", preset)
+
     def _run_command_label(
         self,
         spec: SkillABRunSpec,
@@ -240,7 +246,7 @@ class SkillABExperimentService:
             run_label,
             {
                 "agent_name": spec.preset,
-                "model": spec.model,
+                "model": self._agent_model(spec.preset),
                 "skill_version": "none" if skill_mode == "no_skill" else spec.skill_version,
                 "source": "sidecar",
             },
@@ -282,7 +288,7 @@ class SkillABExperimentService:
             trace_path=str(trace_path.resolve()),
             skill_mode=skill_mode,
             skill_path=str(skill_path.resolve()),
-            model=spec.model or "haiku",
+            model=self._agent_model(spec.preset),
         )
         started = time.monotonic()
         completed = subprocess.run(
