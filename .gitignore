@@ -7,3 +7,8 @@ __pycache__/
 dist/
 .pytest_cache/
 *.db
+
+# Local source/design documents. Keep these private and out of GitHub.
+工业报告.md
+*业务与规则补充契约*.md
+*架构级系统蓝图*.md
