@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import subprocess
 import time
+from uuid import uuid4
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -21,6 +23,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--model", default="")
     parser.add_argument("--max-budget-usd", default="0.5")
     parser.add_argument("--claude-bin", default="claude")
+    parser.add_argument("--eval-run-id", default="")
     return parser.parse_args()
 
 
@@ -108,19 +111,26 @@ def write_trace(
     stderr: str,
     returncode: int,
     duration_ms: int,
+    eval_run_id: str,
 ) -> None:
     input_tokens, output_tokens = collect_usage(stdout)
     response = plain_response(stdout)
+    tool_call_id = f"claude_code:{eval_run_id}"
     events = [
         {
             "type": "session_start",
+            "trace_schema_version": "1.1",
+            "eval_run_id": eval_run_id,
             "model": model,
             "user_question": prompt_file.name,
             "skill_mode": skill_mode,
             "started_at": datetime.now(timezone.utc).isoformat(),
+            "collector_pid": os.getpid(),
         },
         {
             "type": "tool_call",
+            "eval_run_id": eval_run_id,
+            "tool_call_id": tool_call_id,
             "tool_name": "claude_code",
             "tool_input": {
                 "skill_mode": skill_mode,
@@ -129,6 +139,8 @@ def write_trace(
         },
         {
             "type": "tool_result",
+            "eval_run_id": eval_run_id,
+            "tool_call_id": tool_call_id,
             "tool_result": (stdout + stderr)[-4000:],
             "tool_error": returncode != 0,
         },
@@ -137,6 +149,7 @@ def write_trace(
         events.append(
             {
                 "type": "assistant",
+                "eval_run_id": eval_run_id,
                 "text": response[-4000:],
                 "thinking": response[-1000:],
             }
@@ -144,6 +157,7 @@ def write_trace(
     events.append(
         {
             "type": "result",
+            "eval_run_id": eval_run_id,
             "status": status,
             "duration_ms": duration_ms,
             "input_tokens": input_tokens,
@@ -163,6 +177,7 @@ def main() -> int:
     prompt_file = Path(args.prompt_file)
     output_dir = Path(args.output_dir)
     trace_path = Path(args.trace_path)
+    eval_run_id = args.eval_run_id or uuid4().hex
     output_dir.mkdir(parents=True, exist_ok=True)
 
     system_prompt = build_system_prompt(args.skill_mode, args.skill_path)
@@ -211,6 +226,7 @@ def main() -> int:
         stderr=completed.stderr,
         returncode=completed.returncode,
         duration_ms=duration_ms,
+        eval_run_id=eval_run_id,
     )
     return completed.returncode
 

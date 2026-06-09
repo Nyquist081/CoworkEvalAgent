@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
+from uuid import uuid4
 
 from src.core.schemas import TaskRun
 from src.services.evaluation_loader import EvaluationLoader
@@ -205,6 +206,7 @@ class SkillABExperimentService:
                     "--prompt-file {prompt_file} "
                     "--output-dir {output_dir} "
                     "--trace-path {trace_path} "
+                    "--eval-run-id {eval_run_id} "
                     "--skill-mode {skill_mode} "
                     "--skill-path {skill_path} "
                     "{model_args} "
@@ -269,14 +271,44 @@ class SkillABExperimentService:
     ) -> str:
         question_id = question["question_id"]
         attempt_dir = spec.benchmark_root / "runs" / run_label / question_id / "attempt-1"
+        attempt_dir.mkdir(parents=True, exist_ok=True)
+        lock_path = self._acquire_attempt_lock(attempt_dir, run_label, question_id)
+        try:
+            return self._run_locked_question_command(
+                spec=spec,
+                run_label=run_label,
+                question=question,
+                command_template=command_template,
+                skill_mode=skill_mode,
+                attempt_dir=attempt_dir,
+            )
+        finally:
+            lock_path.unlink(missing_ok=True)
+
+    def _run_locked_question_command(
+        self,
+        spec: SkillABRunSpec,
+        run_label: str,
+        question: dict,
+        command_template: str,
+        skill_mode: str,
+        attempt_dir: Path,
+    ) -> str:
+        question_id = question["question_id"]
+        eval_run_id = uuid4().hex
         workdir = attempt_dir / "workdir"
         output_dir = workdir / "输出结果"
         trace_path = workdir / "trace.jsonl"
         prompt_file = spec.benchmark_root / question["prompt_file"]
         skill_path = spec.benchmark_root / "skills" / question.get("skills", "") / "SKILL.md"
 
-        if attempt_dir.exists():
-            shutil.rmtree(attempt_dir)
+        if workdir.exists():
+            shutil.rmtree(workdir)
+        final_output_dir = attempt_dir / "输出结果"
+        if final_output_dir.exists():
+            shutil.rmtree(final_output_dir)
+        final_trace = attempt_dir / "trace.jsonl"
+        final_trace.unlink(missing_ok=True)
         output_dir.mkdir(parents=True, exist_ok=True)
         workdir.mkdir(parents=True, exist_ok=True)
         shutil.copy2(prompt_file, workdir / "prompt.txt")
@@ -292,6 +324,7 @@ class SkillABExperimentService:
             prompt_file=str(prompt_file.resolve()),
             output_dir=str(output_dir.resolve()),
             trace_path=str(trace_path.resolve()),
+            eval_run_id=eval_run_id,
             skill_mode=skill_mode,
             skill_path=str(skill_path.resolve()),
             model_args=self._agent_model_args(spec.preset),
@@ -306,13 +339,11 @@ class SkillABExperimentService:
         )
         duration_ms = int((time.monotonic() - started) * 1000)
 
-        final_output_dir = attempt_dir / "输出结果"
         if output_dir.exists():
             shutil.copytree(output_dir, final_output_dir, dirs_exist_ok=True)
         else:
             final_output_dir.mkdir(parents=True, exist_ok=True)
 
-        final_trace = attempt_dir / "trace.jsonl"
         if trace_path.exists():
             shutil.copy2(trace_path, final_trace)
             return "full"
@@ -326,6 +357,30 @@ class SkillABExperimentService:
         )
         return "degraded"
 
+    def _acquire_attempt_lock(
+        self, attempt_dir: Path, run_label: str, question_id: str
+    ) -> Path:
+        lock_path = attempt_dir / ".coworkeval.lock"
+        try:
+            fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError as exc:
+            raise RuntimeError(
+                f"Attempt is already locked for run {run_label}, question {question_id}: {attempt_dir}"
+            ) from exc
+        with os.fdopen(fd, "w", encoding="utf-8") as lock:
+            lock.write(
+                json.dumps(
+                    {
+                        "run_label": run_label,
+                        "question_id": question_id,
+                        "pid": os.getpid(),
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        return lock_path
+
     def _write_degraded_trace(
         self,
         trace_path: Path,
@@ -337,17 +392,20 @@ class SkillABExperimentService:
         events = [
             {
                 "type": "session_start",
+                "trace_schema_version": "1.1",
                 "model": agent_name,
                 "user_question": question.get("question_name", question["question_id"]),
                 "trace_quality": "degraded",
             },
             {
                 "type": "tool_call",
+                "tool_call_id": "sidecar_command",
                 "tool_name": "sidecar_command",
                 "tool_input": {"agent": agent_name},
             },
             {
                 "type": "tool_result",
+                "tool_call_id": "sidecar_command",
                 "tool_result": (completed.stdout + completed.stderr)[-4000:],
                 "tool_error": completed.returncode != 0,
             },

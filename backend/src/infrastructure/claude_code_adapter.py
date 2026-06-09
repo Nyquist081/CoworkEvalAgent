@@ -45,6 +45,7 @@ class ClaudeCodeAdapter:
         last_ts = None
         model = "unknown"
         user_question = ""
+        pending_tool_ids: list[str] = []
 
         with open(path, encoding="utf-8") as f:
             for line in f:
@@ -59,18 +60,12 @@ class ClaudeCodeAdapter:
 
                 # ── User messages ──────────────────────────
                 if t == "user" and not d.get("isSidechain"):
-                    # Tool results
-                    if d.get("toolUseResult"):
-                        result = d["toolUseResult"]
-                        result_str = json.dumps(result, ensure_ascii=False)
-                        is_error = self._is_error_result(result_str)
-                        events.append({
-                            "type": "tool_result",
-                            "tool_result": result_str[:500],
-                            "tool_error": is_error,
-                        })
-                        if not is_error:
-                            success_calls += 1
+                    result_events = self._extract_tool_result_events(d, pending_tool_ids)
+                    if result_events:
+                        for event in result_events:
+                            events.append(event)
+                            if not event["tool_error"]:
+                                success_calls += 1
                     else:
                         # User prompt
                         msg = d.get("message", {})
@@ -109,8 +104,12 @@ class ClaudeCodeAdapter:
                                 continue
                             if block.get("type") == "tool_use":
                                 tool_calls += 1
+                                tool_call_id = block.get("id", "")
+                                if tool_call_id:
+                                    pending_tool_ids.append(tool_call_id)
                                 events.append({
                                     "type": "tool_call",
+                                    "tool_call_id": tool_call_id,
                                     "tool_name": block.get("name", "unknown"),
                                     "tool_input": block.get("input", {}),
                                 })
@@ -142,6 +141,7 @@ class ClaudeCodeAdapter:
         # Add session_start event at the beginning
         events.insert(0, {
             "type": "session_start",
+            "trace_schema_version": "1.1",
             "model": model,
             "user_question": user_question[:300] if user_question else "",
         })
@@ -209,6 +209,57 @@ class ClaudeCodeAdapter:
             "permission denied", "not found",
         ]
         return any(m in lower for m in error_markers)
+
+    def _extract_tool_result_events(
+        self, record: dict, pending_tool_ids: list[str]
+    ) -> list[dict]:
+        """Extract tool_result blocks and preserve their Claude tool_use id."""
+        message = record.get("message", {})
+        content = message.get("content", []) if isinstance(message, dict) else []
+        result_blocks = [
+            block
+            for block in content
+            if isinstance(block, dict) and block.get("type") == "tool_result"
+        ]
+
+        events = []
+        for block in result_blocks:
+            result = block.get("content", "")
+            result_str = (
+                json.dumps(result, ensure_ascii=False)
+                if isinstance(result, (dict, list))
+                else str(result)
+            )
+            tool_call_id = str(block.get("tool_use_id", "") or "")
+            if tool_call_id in pending_tool_ids:
+                pending_tool_ids.remove(tool_call_id)
+            if not tool_call_id and pending_tool_ids:
+                tool_call_id = pending_tool_ids.pop(0)
+            events.append({
+                "type": "tool_result",
+                "tool_call_id": tool_call_id,
+                "tool_result": result_str[:500],
+                "tool_error": bool(block.get("is_error")) or self._is_error_result(result_str),
+            })
+
+        if events:
+            return events
+
+        if "toolUseResult" not in record:
+            return []
+
+        result = record["toolUseResult"]
+        result_str = json.dumps(result, ensure_ascii=False)
+        tool_call_id = (
+            str(record.get("toolUseID") or record.get("tool_use_id") or "")
+            or (pending_tool_ids.pop(0) if pending_tool_ids else "")
+        )
+        return [{
+            "type": "tool_result",
+            "tool_call_id": tool_call_id,
+            "tool_result": result_str[:500],
+            "tool_error": self._is_error_result(result_str),
+        }]
 
     # ── Task Segmentation ─────────────────────────────────
 
@@ -281,6 +332,7 @@ class ClaudeCodeAdapter:
         last_ts = None
         model = "unknown"
         user_question = segments[segment_index]["full_prompt"][:300]
+        pending_tool_ids: list[str] = []
 
         with open(path, encoding="utf-8") as f:
             for i, line in enumerate(f):
@@ -299,15 +351,15 @@ class ClaudeCodeAdapter:
                 t = d.get("type", "")
 
                 if t == "user" and d.get("toolUseResult"):
-                    result_str = json.dumps(d["toolUseResult"], ensure_ascii=False)
-                    is_error = self._is_error_result(result_str)
-                    events.append({
-                        "type": "tool_result",
-                        "tool_result": result_str[:500],
-                        "tool_error": is_error,
-                    })
-                    if not is_error:
-                        success_calls += 1
+                    for event in self._extract_tool_result_events(d, pending_tool_ids):
+                        events.append(event)
+                        if not event["tool_error"]:
+                            success_calls += 1
+                elif t == "user":
+                    for event in self._extract_tool_result_events(d, pending_tool_ids):
+                        events.append(event)
+                        if not event["tool_error"]:
+                            success_calls += 1
 
                 elif t == "assistant":
                     msg = d.get("message", {})
@@ -324,8 +376,12 @@ class ClaudeCodeAdapter:
                                 continue
                             if block.get("type") == "tool_use":
                                 tool_calls += 1
+                                tool_call_id = block.get("id", "")
+                                if tool_call_id:
+                                    pending_tool_ids.append(tool_call_id)
                                 events.append({
                                     "type": "tool_call",
+                                    "tool_call_id": tool_call_id,
                                     "tool_name": block.get("name", "unknown"),
                                     "tool_input": block.get("input", {}),
                                 })
@@ -355,6 +411,7 @@ class ClaudeCodeAdapter:
 
         events.insert(0, {
             "type": "session_start",
+            "trace_schema_version": "1.1",
             "model": model,
             "user_question": user_question,
         })

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import os
 import shlex
 import shutil
 import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from uuid import uuid4
 
 from src.sidecar_config import SidecarRunConfig
 
@@ -35,12 +37,21 @@ class SidecarRunner:
     def run_question(self, question: dict) -> dict:
         question_id = question["question_id"]
         attempt_dir = self._attempt_dir(question_id)
+        attempt_dir.mkdir(parents=True, exist_ok=True)
+        lock_path = self._acquire_attempt_lock(attempt_dir, question_id)
+        try:
+            return self._run_locked_question(question, attempt_dir)
+        finally:
+            lock_path.unlink(missing_ok=True)
+
+    def _run_locked_question(self, question: dict, attempt_dir: Path) -> dict:
+        question_id = question["question_id"]
+        eval_run_id = uuid4().hex
         workdir = attempt_dir / "workdir"
         output_dir = self.config.agent.render_output_dir(workdir)
         trace_path = self.config.agent.render_trace_path(workdir)
         prompt_file = self.config.benchmark_root / question["prompt_file"]
 
-        attempt_dir.mkdir(parents=True, exist_ok=True)
         workdir.mkdir(parents=True, exist_ok=True)
         output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -50,6 +61,7 @@ class SidecarRunner:
             prompt_file=prompt_file,
             output_dir=output_dir,
             trace_path=trace_path,
+            eval_run_id=eval_run_id,
         )
 
         started = time.monotonic()
@@ -88,9 +100,32 @@ class SidecarRunner:
             "attempt_index": self.config.attempt_index,
             "trace_quality": trace_quality,
             "returncode": completed.returncode,
+            "eval_run_id": eval_run_id,
             "trace_path": str(final_trace),
             "output_dir": str(final_output_dir),
         }
+
+    def _acquire_attempt_lock(self, attempt_dir: Path, question_id: str) -> Path:
+        lock_path = attempt_dir / ".coworkeval.lock"
+        try:
+            fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError as exc:
+            raise RuntimeError(
+                f"Attempt is already locked for question {question_id}: {attempt_dir}"
+            ) from exc
+        with os.fdopen(fd, "w", encoding="utf-8") as lock:
+            lock.write(
+                json.dumps(
+                    {
+                        "run_label": self.config.run_label,
+                        "question_id": question_id,
+                        "pid": os.getpid(),
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        return lock_path
 
     def _load_manifest(self) -> dict:
         manifest_path = self.config.benchmark_root / "manifest.json"
@@ -126,17 +161,20 @@ class SidecarRunner:
         events = [
             {
                 "type": "session_start",
+                "trace_schema_version": "1.1",
                 "model": self.config.model or self.config.agent.name,
                 "user_question": question.get("question_name", question["question_id"]),
                 "trace_quality": "degraded",
             },
             {
                 "type": "tool_call",
+                "tool_call_id": "sidecar_command",
                 "tool_name": "sidecar_command",
                 "tool_input": {"agent": self.config.agent.name},
             },
             {
                 "type": "tool_result",
+                "tool_call_id": "sidecar_command",
                 "tool_result": (completed.stdout + completed.stderr)[-4000:],
                 "tool_error": completed.returncode != 0,
             },

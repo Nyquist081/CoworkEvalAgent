@@ -5,6 +5,7 @@ from pathlib import Path
 
 from src.sidecar_config import AgentCommandConfig, SidecarRunConfig
 from src.sidecar_runner import SidecarRunner
+import pytest
 
 
 def write_manifest(root: Path):
@@ -115,3 +116,24 @@ print("completed")
     assert events[-1]["status"] == "success"
     meta = json.loads((benchmark_root / "runs" / "degraded-run" / "run_meta.json").read_text(encoding="utf-8"))
     assert meta["trace_quality"] == "degraded"
+
+
+def test_sidecar_rejects_locked_attempt_dir(tmp_path):
+    benchmark_root = tmp_path / "evaluations" / "bench-1"
+    benchmark_root.mkdir(parents=True)
+    write_manifest(benchmark_root)
+    attempt_dir = benchmark_root / "runs" / "locked-run" / "q-1" / "attempt-1"
+    attempt_dir.mkdir(parents=True)
+    (attempt_dir / ".coworkeval.lock").write_text("another run", encoding="utf-8")
+
+    config = SidecarRunConfig(
+        benchmark_root=benchmark_root,
+        run_label="locked-run",
+        agent=AgentCommandConfig(
+            name="fake-cli",
+            command_template="echo should-not-run",
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="Attempt is already locked"):
+        SidecarRunner(config).run_question({"question_id": "q-1", "prompt_file": "q-1/prompt.txt"})

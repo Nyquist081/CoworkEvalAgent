@@ -14,6 +14,13 @@ class IncompleteTraceError(CoworkEvalError):
         self.question_id = question_id
 
 
+class TraceIntegrityError(CoworkEvalError):
+    """Raised when trace events cannot be matched into a reliable execution chain."""
+    def __init__(self, message: str, question_id: Optional[str] = None):
+        super().__init__(message)
+        self.question_id = question_id
+
+
 class EvaluationError(CoworkEvalError):
     """Raised when an evaluation step fails unrecoverably."""
     def __init__(self, message: str, run_id: Optional[str] = None):

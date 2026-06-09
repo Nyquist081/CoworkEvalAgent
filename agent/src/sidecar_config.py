@@ -17,12 +17,14 @@ class AgentCommandConfig(BaseModel):
         prompt_file: Path,
         output_dir: Path,
         trace_path: Path,
+        eval_run_id: str = "",
     ) -> str:
         return self.command_template.format(
             workdir=str(workdir),
             prompt_file=str(prompt_file),
             output_dir=str(output_dir),
             trace_path=str(trace_path),
+            eval_run_id=eval_run_id,
         )
 
     def render_trace_path(self, workdir: Path) -> Path:

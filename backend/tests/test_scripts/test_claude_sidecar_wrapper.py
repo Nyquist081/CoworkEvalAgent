@@ -59,6 +59,8 @@ def test_wrapper_runs_claude_and_writes_platform_trace(tmp_path):
             "haiku",
             "--max-budget-usd",
             "0.25",
+            "--eval-run-id",
+            "eval-123",
         ],
         cwd=tmp_path,
         env=env,
@@ -80,8 +82,13 @@ def test_wrapper_runs_claude_and_writes_platform_trace(tmp_path):
 
     events = [json.loads(line) for line in trace_path.read_text(encoding="utf-8").splitlines()]
     assert events[0]["type"] == "session_start"
+    assert events[0]["trace_schema_version"] == "1.1"
+    assert events[0]["eval_run_id"] == "eval-123"
     assert events[0]["skill_mode"] == "no_skill"
+    assert events[1]["tool_call_id"] == "claude_code:eval-123"
+    assert events[2]["tool_call_id"] == events[1]["tool_call_id"]
     assert events[-1]["type"] == "result"
+    assert events[-1]["eval_run_id"] == "eval-123"
     assert events[-1]["status"] == "success"
     assert events[-1]["input_tokens"] == 11
     assert events[-1]["output_tokens"] == 7

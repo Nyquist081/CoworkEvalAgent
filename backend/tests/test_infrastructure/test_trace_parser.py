@@ -1,7 +1,7 @@
 import pytest
 from pathlib import Path
 from src.infrastructure.trace_parser import TraceParser
-from src.core.exceptions import IncompleteTraceError
+from src.core.exceptions import IncompleteTraceError, TraceIntegrityError
 
 SAMPLE_DIR = Path(__file__).parent.parent.parent / "sample_data" / "traces"
 
@@ -60,3 +60,17 @@ async def test_extract_metrics_zero_calls():
     assert metrics["total_tool_calls"] == 0
     assert metrics["success_tool_calls"] == 0
     assert metrics["tool_success_rate"] == 100.0
+
+
+@pytest.mark.asyncio
+async def test_parse_rejects_mismatched_tool_call_ids():
+    parser = TraceParser()
+    lines = [
+        '{"type":"session_start","trace_schema_version":"1.1","model":"test"}',
+        '{"type":"tool_call","tool_call_id":"call-1","tool_name":"Read","tool_input":{}}',
+        '{"type":"tool_result","tool_call_id":"call-2","tool_result":"ok","tool_error":false}',
+        '{"type":"result","status":"success","duration_ms":1,"input_tokens":0,"output_tokens":0,"cost_usd":0.0}',
+    ]
+
+    with pytest.raises(TraceIntegrityError):
+        await parser.parse_lines(lines)
