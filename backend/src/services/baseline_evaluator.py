@@ -67,6 +67,11 @@ class BaselineEvaluator(BaseEvaluator):
             missing_tool_results=metrics["missing_tool_results"],
             agent_tool_success_rate=metrics["agent_tool_success_rate"],
             trace_observability_rate=metrics["trace_observability_rate"],
+            lifecycle_completeness_rate=metrics["lifecycle_completeness_rate"],
+            metric_completeness_rate=metrics["metric_completeness_rate"],
+            reasoning_visibility_rate=metrics["reasoning_visibility_rate"],
+            critical_event_impact=metrics["critical_event_impact"],
+            evaluation_confidence=metrics["evaluation_confidence"],
             evaluation_validity=metrics["evaluation_validity"],
             actual_tokens=metrics["total_tokens"],
             actual_rounds=metrics["rounds"],
@@ -114,6 +119,15 @@ class BaselineEvaluator(BaseEvaluator):
             score.c_cost or 0,
         ]
         score.overall_score = sum(dims) / 6.0
+        trace_quality_factor = 0.75 if trace_quality == TraceQuality.DEGRADED else 1.0
+        score.evaluation_confidence = round(
+            score.evaluation_confidence * trace_quality_factor, 1
+        )
+        if trace_quality == TraceQuality.DEGRADED and score.evaluation_validity == "valid":
+            score.evaluation_validity = "trace_incomplete"
+        score.score_with_confidence = round(
+            score.overall_score * score.evaluation_confidence / 100.0, 1
+        )
 
         await self.score_repo.save(score)
         return score

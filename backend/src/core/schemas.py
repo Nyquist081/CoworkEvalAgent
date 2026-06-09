@@ -161,6 +161,12 @@ class ScoreResult(BaseModel):
     missing_tool_results: int = 0
     agent_tool_success_rate: float = 100.0
     trace_observability_rate: float = 100.0
+    lifecycle_completeness_rate: float = 100.0
+    metric_completeness_rate: float = 100.0
+    reasoning_visibility_rate: float = 100.0
+    critical_event_impact: float = 100.0
+    evaluation_confidence: float = 100.0
+    score_with_confidence: Optional[float] = None
     evaluation_validity: str = "valid"
     actual_tokens: int = 0
     actual_rounds: int = 0

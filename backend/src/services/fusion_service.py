@@ -62,3 +62,6 @@ class FusionService:
             score.c_cost or 0,
         ]
         score.overall_score = sum(dims) / 6.0
+        score.score_with_confidence = round(
+            score.overall_score * score.evaluation_confidence / 100.0, 1
+        )

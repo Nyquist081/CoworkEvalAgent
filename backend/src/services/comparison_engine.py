@@ -121,7 +121,26 @@ class ComparisonEngine:
                 sum(s.actual_success_calls for s in scores) / observed_denominator * 100
                 if observed_denominator > 0 else 100.0
             )
-            validity = "valid" if missing_tool_results == 0 else "trace_incomplete"
+            n = len(scores) or 1
+            evaluation_confidence = sum(s.evaluation_confidence for s in scores) / n
+            score_with_confidence = (
+                sum(
+                    s.score_with_confidence
+                    if s.score_with_confidence is not None
+                    else (s.overall_score or 0) * s.evaluation_confidence / 100.0
+                    for s in scores
+                )
+                / n
+            )
+            lifecycle_rate = sum(s.lifecycle_completeness_rate for s in scores) / n
+            metric_rate = sum(s.metric_completeness_rate for s in scores) / n
+            reasoning_rate = sum(s.reasoning_visibility_rate for s in scores) / n
+            critical_impact = sum(s.critical_event_impact for s in scores) / n
+            validity = (
+                "valid"
+                if missing_tool_results == 0 and evaluation_confidence >= 99.9
+                else "trace_incomplete"
+            )
             summaries.append({
                 "label": label,
                 "actual_tool_calls": total_tool_calls,
@@ -129,6 +148,12 @@ class ComparisonEngine:
                 "missing_tool_results": missing_tool_results,
                 "agent_tool_success_rate": round(agent_tool_success_rate, 1),
                 "trace_observability_rate": round(trace_observability_rate, 1),
+                "lifecycle_completeness_rate": round(lifecycle_rate, 1),
+                "metric_completeness_rate": round(metric_rate, 1),
+                "reasoning_visibility_rate": round(reasoning_rate, 1),
+                "critical_event_impact": round(critical_impact, 1),
+                "evaluation_confidence": round(evaluation_confidence, 1),
+                "score_with_confidence": round(score_with_confidence, 1),
                 "evaluation_validity": validity,
                 "can_claim_winner": validity == "valid",
             })

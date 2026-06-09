@@ -109,6 +109,8 @@ class TestObservabilityComparison:
             missing_tool_results=2,
             trace_observability_rate=80.0,
             agent_tool_success_rate=100.0,
+            evaluation_confidence=60.0,
+            score_with_confidence=54.0,
             overall_score=90.0,
         )
 
@@ -122,3 +124,4 @@ class TestObservabilityComparison:
         assert result["runs"][1]["can_claim_winner"] is False
         assert result["runs"][1]["missing_tool_results"] == 2
         assert result["runs"][1]["trace_observability_rate"] == 80.0
+        assert result["runs"][1]["score_with_confidence"] == 54.0

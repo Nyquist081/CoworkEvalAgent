@@ -57,6 +57,12 @@ async def test_score_repository_round_trips_attempt_metadata():
         missing_tool_results=2,
         agent_tool_success_rate=87.5,
         trace_observability_rate=80.0,
+        lifecycle_completeness_rate=100.0,
+        metric_completeness_rate=70.0,
+        reasoning_visibility_rate=85.0,
+        critical_event_impact=60.0,
+        evaluation_confidence=42.8,
+        score_with_confidence=36.5,
         evaluation_validity="trace_incomplete",
     )
 
@@ -72,4 +78,10 @@ async def test_score_repository_round_trips_attempt_metadata():
     assert loaded.missing_tool_results == 2
     assert loaded.agent_tool_success_rate == 87.5
     assert loaded.trace_observability_rate == 80.0
+    assert loaded.lifecycle_completeness_rate == 100.0
+    assert loaded.metric_completeness_rate == 70.0
+    assert loaded.reasoning_visibility_rate == 85.0
+    assert loaded.critical_event_impact == 60.0
+    assert loaded.evaluation_confidence == 42.8
+    assert loaded.score_with_confidence == 36.5
     assert loaded.evaluation_validity == "trace_incomplete"

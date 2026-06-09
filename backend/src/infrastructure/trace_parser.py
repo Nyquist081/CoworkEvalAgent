@@ -127,6 +127,7 @@ class TraceParser:
         tool_calls = [e for e in trace_data if e.get("type") == "tool_call"]
         tool_results = [e for e in trace_data if e.get("type") == "tool_result"]
         assistant_msgs = [e for e in trace_data if e.get("type") == "assistant" and "thinking" in e]
+        assistant_events = [e for e in trace_data if e.get("type") == "assistant"]
 
         total_tool_calls = len(tool_calls)
         diagnostic = self.diagnose_integrity(trace_data)
@@ -159,6 +160,24 @@ class TraceParser:
         )
 
         result_records = [e for e in trace_data if e.get("type") == "result"]
+        lifecycle_completeness_rate = self._lifecycle_completeness_rate(trace_data)
+        metric_completeness_rate = self._metric_completeness_rate(result_records)
+        reasoning_visibility_rate = self._reasoning_visibility_rate(
+            assistant_events, total_tool_calls
+        )
+        critical_event_impact = self._critical_event_impact(diagnostic, tool_calls)
+        tool_observability_factor = self._trace_observability_factor(
+            trace_observability_rate
+        )
+        evaluation_confidence = round(
+            100.0
+            * tool_observability_factor
+            * (lifecycle_completeness_rate / 100.0)
+            * (metric_completeness_rate / 100.0)
+            * (reasoning_visibility_rate / 100.0)
+            * (critical_event_impact / 100.0),
+            1,
+        )
         if result_records:
             result = result_records[-1]
             duration_ms = result.get("duration_ms", 0)
@@ -179,8 +198,15 @@ class TraceParser:
             "missing_tool_results": missing_tool_results,
             "agent_tool_success_rate": agent_tool_success_rate,
             "trace_observability_rate": trace_observability_rate,
+            "lifecycle_completeness_rate": lifecycle_completeness_rate,
+            "metric_completeness_rate": metric_completeness_rate,
+            "reasoning_visibility_rate": reasoning_visibility_rate,
+            "critical_event_impact": critical_event_impact,
+            "evaluation_confidence": evaluation_confidence,
             "evaluation_validity": (
-                "valid" if diagnostic["integrity_status"] == "ok" else "trace_incomplete"
+                "valid"
+                if diagnostic["integrity_status"] == "ok" and evaluation_confidence >= 99.9
+                else "trace_incomplete"
             ),
             "tool_success_rate": agent_tool_success_rate,
             "total_tokens": input_tokens + output_tokens,
@@ -190,3 +216,64 @@ class TraceParser:
             "duration_ms": duration_ms,
             "cost_usd": cost_usd,
         }
+
+    def _trace_observability_factor(self, rate_pct: float) -> float:
+        rate = rate_pct / 100.0
+        if rate >= 0.98:
+            return 1.0
+        if rate >= 0.80:
+            return 0.7 + 0.3 * rate
+        return rate
+
+    def _lifecycle_completeness_rate(self, events: list[dict]) -> float:
+        has_session = any(e.get("type") == "session_start" for e in events)
+        has_result = any(e.get("type") == "result" for e in events)
+        if has_session and has_result:
+            return 100.0
+        if has_result:
+            return 70.0
+        if has_session:
+            return 30.0
+        return 0.0
+
+    def _metric_completeness_rate(self, result_records: list[dict]) -> float:
+        if not result_records:
+            return 50.0
+        result = result_records[-1]
+        required = ["duration_ms", "input_tokens", "output_tokens", "cost_usd"]
+        missing = [field for field in required if result.get(field) is None]
+        if not missing:
+            return 100.0
+        if missing == ["cost_usd"]:
+            return 85.0
+        if len(missing) == 1:
+            return 70.0
+        return 50.0
+
+    def _reasoning_visibility_rate(
+        self, assistant_events: list[dict], total_tool_calls: int
+    ) -> float:
+        if any(e.get("thinking") for e in assistant_events):
+            return 100.0
+        if any(e.get("text") for e in assistant_events):
+            return 85.0
+        if total_tool_calls > 0:
+            return 40.0
+        return 60.0
+
+    def _critical_event_impact(self, diagnostic: dict, tool_calls: list[dict]) -> float:
+        if diagnostic["integrity_status"] == "ok":
+            return 100.0
+        affected_ids = set(diagnostic.get("affected_tool_call_ids") or [])
+        if not affected_ids:
+            return 60.0
+
+        affected_calls = [
+            call for call in tool_calls if self._tool_event_id(call) in affected_ids
+        ]
+        names = {str(call.get("tool_name", "")).lower() for call in affected_calls}
+        if any(name in names for name in ("write", "edit", "multiedit", "notebookedit")):
+            return 30.0
+        if any(name in names for name in ("bash", "skill", "claude_code")):
+            return 60.0
+        return 85.0

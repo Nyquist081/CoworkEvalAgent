@@ -175,6 +175,12 @@ def test_score_result_accepts_attempt_metadata():
         missing_tool_results=2,
         agent_tool_success_rate=87.5,
         trace_observability_rate=80.0,
+        lifecycle_completeness_rate=100.0,
+        metric_completeness_rate=70.0,
+        reasoning_visibility_rate=85.0,
+        critical_event_impact=60.0,
+        evaluation_confidence=42.8,
+        score_with_confidence=36.5,
         evaluation_validity="trace_incomplete",
     )
 
@@ -182,4 +188,6 @@ def test_score_result_accepts_attempt_metadata():
     assert score.trace_quality == TraceQuality.DEGRADED
     assert score.is_partial_score is True
     assert score.trace_observability_rate == 80.0
+    assert score.evaluation_confidence == 42.8
+    assert score.score_with_confidence == 36.5
     assert score.evaluation_validity == "trace_incomplete"

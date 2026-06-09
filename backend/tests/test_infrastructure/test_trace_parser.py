@@ -109,3 +109,22 @@ def test_extract_metrics_separates_agent_success_from_observability():
     assert metrics["missing_tool_results"] == 1
     assert metrics["agent_tool_success_rate"] == 100.0
     assert metrics["trace_observability_rate"] == 50.0
+
+
+def test_extract_metrics_confidence_penalizes_missing_lifecycle_metrics_and_reasoning():
+    parser = TraceParser()
+    trace_data = [
+        {"type": "session_start", "trace_schema_version": "1.1", "model": "test"},
+        {"type": "tool_call", "tool_call_id": "call-1", "tool_name": "Read"},
+        {"type": "tool_result", "tool_call_id": "call-1", "tool_error": False},
+        {"type": "result", "status": "success", "input_tokens": 100, "output_tokens": 20},
+    ]
+
+    metrics = parser.extract_metrics(trace_data)
+
+    assert metrics["trace_observability_rate"] == 100.0
+    assert metrics["lifecycle_completeness_rate"] == 100.0
+    assert metrics["metric_completeness_rate"] == 50.0
+    assert metrics["reasoning_visibility_rate"] == 40.0
+    assert metrics["critical_event_impact"] == 100.0
+    assert metrics["evaluation_confidence"] == 20.0

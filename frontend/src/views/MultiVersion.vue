@@ -86,12 +86,32 @@
         </template>
         <div class="rate-grid observability-grid">
           <div>
-            <b :class="{ risk: item.trace_observability_rate < 100 }">{{ item.trace_observability_rate }}%</b>
-            <span>Trace 观测完整率</span>
+            <b :class="{ risk: !item.can_claim_winner }">{{ item.score_with_confidence ?? '-' }}</b>
+            <span>置信调整分</span>
           </div>
           <div>
-            <b>{{ item.agent_tool_success_rate }}%</b>
-            <span>Agent 工具成功率（已观测）</span>
+            <b :class="{ risk: item.evaluation_confidence < 100 }">{{ item.evaluation_confidence }}%</b>
+            <span>综合评测置信度</span>
+          </div>
+          <div>
+            <b :class="{ risk: item.trace_observability_rate < 100 }">{{ item.trace_observability_rate }}%</b>
+            <span>工具结果观测率</span>
+          </div>
+          <div>
+            <b :class="{ risk: item.lifecycle_completeness_rate < 100 }">{{ item.lifecycle_completeness_rate }}%</b>
+            <span>生命周期完整率</span>
+          </div>
+          <div>
+            <b :class="{ risk: item.metric_completeness_rate < 100 }">{{ item.metric_completeness_rate }}%</b>
+            <span>Token/耗时完整率</span>
+          </div>
+          <div>
+            <b :class="{ risk: item.reasoning_visibility_rate < 100 }">{{ item.reasoning_visibility_rate }}%</b>
+            <span>思考过程可见度</span>
+          </div>
+          <div>
+            <b :class="{ risk: item.critical_event_impact < 100 }">{{ item.critical_event_impact }}%</b>
+            <span>缺失关键事件影响</span>
           </div>
           <div>
             <b :class="{ risk: item.missing_tool_results > 0 }">{{ item.missing_tool_results }}</b>

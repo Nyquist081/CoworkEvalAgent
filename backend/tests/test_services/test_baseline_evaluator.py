@@ -84,6 +84,21 @@ async def test_t2_zero_calls_defaults_100(evaluator, question):
 
 
 @pytest.mark.asyncio
+async def test_score_with_confidence_uses_trace_confidence(evaluator, question):
+    trace = [
+        {"type": "session_start", "trace_schema_version": "1.1", "model": "test"},
+        {"type": "tool_call", "tool_call_id": "call-1", "tool_name": "Read"},
+        {"type": "tool_result", "tool_call_id": "call-1", "tool_error": False},
+        {"type": "result", "status": "success", "input_tokens": 100, "output_tokens": 20},
+    ]
+
+    score = await evaluator.evaluate(run_id=uuid4(), question=question, trace_data=trace)
+
+    assert score.evaluation_confidence == 20.0
+    assert score.score_with_confidence == round((score.overall_score or 0) * 0.2, 1)
+
+
+@pytest.mark.asyncio
 async def test_no_negative_scores(evaluator, question):
     question.baseline_tool_count = 1
     question.baseline_time_ms = 1

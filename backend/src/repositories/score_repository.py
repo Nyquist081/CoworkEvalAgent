@@ -45,6 +45,12 @@ class ScoreResultModel(Base):
     missing_tool_results = Column(Float, default=0)
     agent_tool_success_rate = Column(Float, default=100.0)
     trace_observability_rate = Column(Float, default=100.0)
+    lifecycle_completeness_rate = Column(Float, default=100.0)
+    metric_completeness_rate = Column(Float, default=100.0)
+    reasoning_visibility_rate = Column(Float, default=100.0)
+    critical_event_impact = Column(Float, default=100.0)
+    evaluation_confidence = Column(Float, default=100.0)
+    score_with_confidence = Column(Float, nullable=True)
     evaluation_validity = Column(String, default="valid")
     actual_tokens = Column(Float, default=0)
     actual_rounds = Column(Float, default=0)
@@ -74,6 +80,12 @@ class ScoreResultModel(Base):
             missing_tool_results=int(self.missing_tool_results or 0),
             agent_tool_success_rate=float(self.agent_tool_success_rate or 100.0),
             trace_observability_rate=float(self.trace_observability_rate or 100.0),
+            lifecycle_completeness_rate=float(self.lifecycle_completeness_rate or 100.0),
+            metric_completeness_rate=float(self.metric_completeness_rate or 100.0),
+            reasoning_visibility_rate=float(self.reasoning_visibility_rate or 100.0),
+            critical_event_impact=float(self.critical_event_impact or 100.0),
+            evaluation_confidence=float(self.evaluation_confidence or 100.0),
+            score_with_confidence=self.score_with_confidence,
             evaluation_validity=self.evaluation_validity or "valid",
             actual_tokens=int(self.actual_tokens),
             actual_rounds=int(self.actual_rounds),
@@ -105,6 +117,12 @@ class ScoreResultModel(Base):
             missing_tool_results=s.missing_tool_results,
             agent_tool_success_rate=s.agent_tool_success_rate,
             trace_observability_rate=s.trace_observability_rate,
+            lifecycle_completeness_rate=s.lifecycle_completeness_rate,
+            metric_completeness_rate=s.metric_completeness_rate,
+            reasoning_visibility_rate=s.reasoning_visibility_rate,
+            critical_event_impact=s.critical_event_impact,
+            evaluation_confidence=s.evaluation_confidence,
+            score_with_confidence=s.score_with_confidence,
             evaluation_validity=s.evaluation_validity,
             actual_tokens=s.actual_tokens,
             actual_rounds=s.actual_rounds,
