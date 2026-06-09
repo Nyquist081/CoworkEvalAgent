@@ -66,6 +66,34 @@ async def test_judge_evaluator_returns_score(question, trace_data, mock_verdict)
 
 
 @pytest.mark.asyncio
+async def test_judge_prompt_marks_missing_tool_result_as_harness_failure(question, mock_verdict):
+    judge_repo = AsyncMock()
+    judge_repo.save = AsyncMock()
+    llm_client = AsyncMock()
+    llm_client.ask_structured_output = AsyncMock(return_value=mock_verdict)
+    trace_data = [
+        {"type": "session_start", "trace_schema_version": "1.1", "model": "Claude-4"},
+        {
+            "type": "tool_call",
+            "tool_call_id": "call-1",
+            "tool_name": "Read",
+            "tool_input": {"file_path": "input.txt"},
+        },
+        {"type": "result", "status": "success", "duration_ms": 1000,
+         "input_tokens": 100, "output_tokens": 50, "cost_usd": 0.01},
+    ]
+
+    evaluator = JudgeEvaluator(judge_repo=judge_repo, llm_client=llm_client)
+    await evaluator.evaluate(run_id=uuid4(), question=question, trace_data=trace_data)
+
+    user_prompt = llm_client.ask_structured_output.call_args.kwargs["user_prompt"]
+    assert "Trace 完整性诊断" in user_prompt
+    assert "integrity_status: missing_tool_result" in user_prompt
+    assert "failure_domain: harness" in user_prompt
+    assert "do_not_penalize_agent_tool_accuracy" in user_prompt
+
+
+@pytest.mark.asyncio
 async def test_fatal_violation_sets_dimension_to_zero(question, trace_data):
     judge_repo = AsyncMock()
     judge_repo.save = AsyncMock()

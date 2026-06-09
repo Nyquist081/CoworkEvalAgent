@@ -12,6 +12,7 @@ from src.core.schemas import (
     SkillCompliance, FatalViolation,
 )
 from src.infrastructure.llm_gateway import LLMClient
+from src.infrastructure.trace_parser import TraceParser
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,14 @@ Before scoring, you MUST verify the trace is actually executing the assigned tas
   * Explain the mismatch clearly in conclusion
 
 ## Scoring Rubric (0-100)
+
+## Trace Integrity Boundary
+If the user prompt contains "Trace 完整性诊断":
+- failure_domain=harness means the observation/capture layer is incomplete.
+- Missing or orphaned tool_result events MUST NOT be treated as agent tool failures.
+- Do not penalize tool_accuracy only because a matching tool_result is absent.
+- Judge only the behavior that is actually observable in the trace.
+- If the missing observation prevents confident task-completion assessment, lower confidence in the explanation and state that the result is partially unverifiable.
 
 ### execution_efficiency (Action Efficiency)
 - 90-100: Path is extremely streamlined, every action purposeful, zero wasted steps
@@ -85,12 +94,14 @@ class JudgeEvaluator(BaseEvaluator):
         self.judge_repo = judge_repo
         self.llm_client = llm_client
         self.max_retries = max_retries
+        self.trace_parser = TraceParser()
 
     async def evaluate(
         self, run_id: UUID, question: QuestionItem, trace_data: list[dict]
     ) -> ScoreResult:
         # Format trace as Step-numbered text
         trace_text = self._format_trace(trace_data)
+        trace_diagnostic = self.trace_parser.diagnose_integrity(trace_data)
 
         # Build user prompt with question context so judge can verify task relevance
         fatal_rules = question.eval_config.fatal_rules if question.eval_config else []
@@ -112,6 +123,7 @@ class JudgeEvaluator(BaseEvaluator):
             question_prompt=question_prompt,
             expected_inputs=question.input_files,
             expected_output_dir=question.output_dir,
+            trace_diagnostic=trace_diagnostic,
         )
 
         # Call LLM with retry
@@ -196,6 +208,7 @@ class JudgeEvaluator(BaseEvaluator):
         question_prompt: str = "",
         expected_inputs: list[str] | None = None,
         expected_output_dir: str = "",
+        trace_diagnostic: dict | None = None,
     ) -> str:
         parts = [
             f"## 评测题目",
@@ -217,6 +230,21 @@ class JudgeEvaluator(BaseEvaluator):
 
         if expected_output_dir:
             parts.append(f"## 题目要求的输出目录: {expected_output_dir}")
+            parts.append("")
+
+        if trace_diagnostic and trace_diagnostic.get("integrity_status") != "ok":
+            parts.append("## Trace 完整性诊断")
+            parts.append(f"integrity_status: {trace_diagnostic.get('integrity_status')}")
+            parts.append(f"failure_domain: {trace_diagnostic.get('failure_domain')}")
+            parts.append(
+                "affected_tool_call_ids: "
+                + ", ".join(trace_diagnostic.get("affected_tool_call_ids") or [])
+            )
+            parts.append(f"scoring_policy: {trace_diagnostic.get('scoring_policy')}")
+            parts.append(f"message: {trace_diagnostic.get('message')}")
+            parts.append(
+                "裁判约束: 这是观测链路问题，不得仅因缺失 tool_result 将其判定为 Agent 工具调用失败。"
+            )
             parts.append("")
 
         # TASK RELEVANCE CHECK — the gate

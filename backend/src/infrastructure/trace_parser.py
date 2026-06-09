@@ -34,6 +34,12 @@ class TraceParser:
         return events
 
     def _validate_tool_integrity(self, events: list[dict]) -> None:
+        diagnostic = self.diagnose_integrity(events)
+        if diagnostic["integrity_status"] == "ok":
+            return
+        raise TraceIntegrityError(diagnostic["message"])
+
+    def diagnose_integrity(self, events: list[dict]) -> dict:
         tool_calls = [e for e in events if e.get("type") == "tool_call"]
         tool_results = [e for e in events if e.get("type") == "tool_result"]
         ids = [
@@ -42,28 +48,80 @@ class TraceParser:
             if self._tool_event_id(e)
         ]
         if not ids:
-            return
+            return {
+                "integrity_status": "ok",
+                "failure_domain": "none",
+                "affected_tool_call_ids": [],
+                "scoring_policy": "normal_scoring",
+                "message": "Trace has no tool ids; legacy trace compatibility mode.",
+            }
 
         call_ids = [self._tool_event_id(e) for e in tool_calls]
         result_ids = [self._tool_event_id(e) for e in tool_results]
         if any(not value for value in call_ids):
-            raise TraceIntegrityError("Trace mixes identified and unidentified tool_call events.")
+            return self._integrity_problem(
+                "mixed_tool_id",
+                [],
+                "Trace mixes identified and unidentified tool_call events.",
+            )
         if any(not value for value in result_ids):
-            raise TraceIntegrityError("Trace mixes identified and unidentified tool_result events.")
+            return self._integrity_problem(
+                "mixed_tool_id",
+                [],
+                "Trace mixes identified and unidentified tool_result events.",
+            )
         if len(set(call_ids)) != len(call_ids):
-            raise TraceIntegrityError("Trace contains duplicate tool_call_id values.")
+            return self._integrity_problem(
+                "duplicate_tool_id",
+                self._duplicates(call_ids),
+                "Trace contains duplicate tool_call_id values.",
+            )
         if len(set(result_ids)) != len(result_ids):
-            raise TraceIntegrityError("Trace contains duplicate tool_result ids.")
+            return self._integrity_problem(
+                "duplicate_tool_id",
+                self._duplicates(result_ids),
+                "Trace contains duplicate tool_result ids.",
+            )
         if set(call_ids) != set(result_ids):
             missing_results = sorted(set(call_ids) - set(result_ids))
             orphan_results = sorted(set(result_ids) - set(call_ids))
-            raise TraceIntegrityError(
+            status = "missing_tool_result" if missing_results else "orphan_tool_result"
+            return self._integrity_problem(
+                status,
+                missing_results or orphan_results,
                 "Trace tool_call/tool_result ids do not match. "
-                f"missing_results={missing_results}, orphan_results={orphan_results}"
+                f"missing_results={missing_results}, orphan_results={orphan_results}",
             )
+        return {
+            "integrity_status": "ok",
+            "failure_domain": "none",
+            "affected_tool_call_ids": [],
+            "scoring_policy": "normal_scoring",
+            "message": "Every identified tool_call has exactly one matching tool_result.",
+        }
 
     def _tool_event_id(self, event: dict) -> str:
         return str(event.get("tool_call_id") or event.get("tool_use_id") or "")
+
+    def _integrity_problem(
+        self, status: str, affected_tool_call_ids: list[str], message: str
+    ) -> dict:
+        return {
+            "integrity_status": status,
+            "failure_domain": "harness",
+            "affected_tool_call_ids": affected_tool_call_ids,
+            "scoring_policy": "do_not_penalize_agent_tool_accuracy",
+            "message": message,
+        }
+
+    def _duplicates(self, values: list[str]) -> list[str]:
+        seen = set()
+        duplicates = []
+        for value in values:
+            if value in seen and value not in duplicates:
+                duplicates.append(value)
+            seen.add(value)
+        return duplicates
 
     def extract_metrics(self, trace_data: list[dict]) -> dict:
         tool_calls = [e for e in trace_data if e.get("type") == "tool_call"]

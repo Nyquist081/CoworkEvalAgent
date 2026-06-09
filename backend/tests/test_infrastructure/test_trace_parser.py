@@ -74,3 +74,19 @@ async def test_parse_rejects_mismatched_tool_call_ids():
 
     with pytest.raises(TraceIntegrityError):
         await parser.parse_lines(lines)
+
+
+def test_diagnose_integrity_classifies_missing_result_as_harness_failure():
+    parser = TraceParser()
+    trace_data = [
+        {"type": "session_start", "trace_schema_version": "1.1", "model": "test"},
+        {"type": "tool_call", "tool_call_id": "call-1", "tool_name": "Read"},
+        {"type": "result", "status": "success"},
+    ]
+
+    diagnostic = parser.diagnose_integrity(trace_data)
+
+    assert diagnostic["integrity_status"] == "missing_tool_result"
+    assert diagnostic["failure_domain"] == "harness"
+    assert diagnostic["affected_tool_call_ids"] == ["call-1"]
+    assert diagnostic["scoring_policy"] == "do_not_penalize_agent_tool_accuracy"
