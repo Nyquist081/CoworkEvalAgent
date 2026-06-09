@@ -90,3 +90,22 @@ def test_diagnose_integrity_classifies_missing_result_as_harness_failure():
     assert diagnostic["failure_domain"] == "harness"
     assert diagnostic["affected_tool_call_ids"] == ["call-1"]
     assert diagnostic["scoring_policy"] == "do_not_penalize_agent_tool_accuracy"
+
+
+def test_extract_metrics_separates_agent_success_from_observability():
+    parser = TraceParser()
+    trace_data = [
+        {"type": "session_start", "trace_schema_version": "1.1", "model": "test"},
+        {"type": "tool_call", "tool_call_id": "call-1", "tool_name": "Read"},
+        {"type": "tool_result", "tool_call_id": "call-1", "tool_error": False},
+        {"type": "tool_call", "tool_call_id": "call-2", "tool_name": "Bash"},
+        {"type": "result", "status": "success"},
+    ]
+
+    metrics = parser.extract_metrics(trace_data)
+
+    assert metrics["total_tool_calls"] == 2
+    assert metrics["observed_tool_results"] == 1
+    assert metrics["missing_tool_results"] == 1
+    assert metrics["agent_tool_success_rate"] == 100.0
+    assert metrics["trace_observability_rate"] == 50.0

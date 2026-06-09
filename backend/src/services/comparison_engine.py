@@ -104,3 +104,32 @@ class ComparisonEngine:
                 "threshold": pr.get("threshold", 0.6),
             })
         return {"runs": runs}
+
+    def observability_comparison(self, runs: dict[str, list[ScoreResult]]) -> dict:
+        """Compare harness trace observability separately from agent quality."""
+        summaries = []
+        for label, scores in runs.items():
+            total_tool_calls = sum(s.actual_tool_calls for s in scores)
+            observed_tool_results = sum(s.observed_tool_results for s in scores)
+            missing_tool_results = sum(s.missing_tool_results for s in scores)
+            trace_observability_rate = (
+                observed_tool_results / total_tool_calls * 100
+                if total_tool_calls > 0 else 100.0
+            )
+            observed_denominator = max(observed_tool_results, 0)
+            agent_tool_success_rate = (
+                sum(s.actual_success_calls for s in scores) / observed_denominator * 100
+                if observed_denominator > 0 else 100.0
+            )
+            validity = "valid" if missing_tool_results == 0 else "trace_incomplete"
+            summaries.append({
+                "label": label,
+                "actual_tool_calls": total_tool_calls,
+                "observed_tool_results": observed_tool_results,
+                "missing_tool_results": missing_tool_results,
+                "agent_tool_success_rate": round(agent_tool_success_rate, 1),
+                "trace_observability_rate": round(trace_observability_rate, 1),
+                "evaluation_validity": validity,
+                "can_claim_winner": validity == "valid",
+            })
+        return {"runs": summaries}

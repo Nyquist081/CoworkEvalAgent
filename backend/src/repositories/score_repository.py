@@ -41,6 +41,11 @@ class ScoreResultModel(Base):
 
     actual_tool_calls = Column(Float, default=0)
     actual_success_calls = Column(Float, default=0)
+    observed_tool_results = Column(Float, default=0)
+    missing_tool_results = Column(Float, default=0)
+    agent_tool_success_rate = Column(Float, default=100.0)
+    trace_observability_rate = Column(Float, default=100.0)
+    evaluation_validity = Column(String, default="valid")
     actual_tokens = Column(Float, default=0)
     actual_rounds = Column(Float, default=0)
     actual_time_ms = Column(Float, default=0)
@@ -65,6 +70,11 @@ class ScoreResultModel(Base):
             t1_judge_only=self.t1_judge_only,
             actual_tool_calls=int(self.actual_tool_calls),
             actual_success_calls=int(self.actual_success_calls),
+            observed_tool_results=int(self.observed_tool_results or self.actual_tool_calls or 0),
+            missing_tool_results=int(self.missing_tool_results or 0),
+            agent_tool_success_rate=float(self.agent_tool_success_rate or 100.0),
+            trace_observability_rate=float(self.trace_observability_rate or 100.0),
+            evaluation_validity=self.evaluation_validity or "valid",
             actual_tokens=int(self.actual_tokens),
             actual_rounds=int(self.actual_rounds),
             actual_time_ms=int(self.actual_time_ms),
@@ -91,6 +101,11 @@ class ScoreResultModel(Base):
             t1_judge_only=s.t1_judge_only,
             actual_tool_calls=s.actual_tool_calls,
             actual_success_calls=s.actual_success_calls,
+            observed_tool_results=s.observed_tool_results,
+            missing_tool_results=s.missing_tool_results,
+            agent_tool_success_rate=s.agent_tool_success_rate,
+            trace_observability_rate=s.trace_observability_rate,
+            evaluation_validity=s.evaluation_validity,
             actual_tokens=s.actual_tokens,
             actual_rounds=s.actual_rounds,
             actual_time_ms=s.actual_time_ms,

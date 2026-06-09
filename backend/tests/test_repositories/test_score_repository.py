@@ -53,6 +53,11 @@ async def test_score_repository_round_trips_attempt_metadata():
         is_partial_score=True,
         t1_completion=75.0,
         overall_score=70.0,
+        observed_tool_results=8,
+        missing_tool_results=2,
+        agent_tool_success_rate=87.5,
+        trace_observability_rate=80.0,
+        evaluation_validity="trace_incomplete",
     )
 
     await repo.save(score)
@@ -63,3 +68,8 @@ async def test_score_repository_round_trips_attempt_metadata():
     assert loaded.trace_quality == TraceQuality.DEGRADED
     assert loaded.is_partial_score is True
     assert loaded.t1_completion == 75.0
+    assert loaded.observed_tool_results == 8
+    assert loaded.missing_tool_results == 2
+    assert loaded.agent_tool_success_rate == 87.5
+    assert loaded.trace_observability_rate == 80.0
+    assert loaded.evaluation_validity == "trace_incomplete"

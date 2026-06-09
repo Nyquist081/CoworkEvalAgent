@@ -63,6 +63,11 @@ class BaselineEvaluator(BaseEvaluator):
             is_partial_score=is_partial_score,
             actual_tool_calls=metrics["total_tool_calls"],
             actual_success_calls=metrics["success_tool_calls"],
+            observed_tool_results=metrics["observed_tool_results"],
+            missing_tool_results=metrics["missing_tool_results"],
+            agent_tool_success_rate=metrics["agent_tool_success_rate"],
+            trace_observability_rate=metrics["trace_observability_rate"],
+            evaluation_validity=metrics["evaluation_validity"],
             actual_tokens=metrics["total_tokens"],
             actual_rounds=metrics["rounds"],
             actual_time_ms=metrics["duration_ms"],
@@ -74,7 +79,7 @@ class BaselineEvaluator(BaseEvaluator):
 
         # T2: Tool Accuracy
         score.t2_accuracy = self._compute_t2(
-            metrics["success_tool_calls"], metrics["total_tool_calls"]
+            metrics["success_tool_calls"], metrics["observed_tool_results"]
         )
 
         # T3: Tool Efficiency

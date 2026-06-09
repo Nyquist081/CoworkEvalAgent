@@ -171,8 +171,15 @@ def test_score_result_accepts_attempt_metadata():
         attempt_index=2,
         trace_quality=TraceQuality.DEGRADED,
         is_partial_score=True,
+        observed_tool_results=8,
+        missing_tool_results=2,
+        agent_tool_success_rate=87.5,
+        trace_observability_rate=80.0,
+        evaluation_validity="trace_incomplete",
     )
 
     assert score.attempt_index == 2
     assert score.trace_quality == TraceQuality.DEGRADED
     assert score.is_partial_score is True
+    assert score.trace_observability_rate == 80.0
+    assert score.evaluation_validity == "trace_incomplete"

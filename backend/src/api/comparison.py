@@ -94,3 +94,10 @@ async def pass_rate(run_ids: str = ""):
     ids = _parse_run_ids(run_ids)
     _, pass_rates_by_label = await _load_run_scores(ids)
     return engine.pass_rate_comparison(pass_rates_by_label)
+
+
+@router.get("/observability", response_model=dict)
+async def observability(run_ids: str = ""):
+    ids = _parse_run_ids(run_ids)
+    scores_by_label, _ = await _load_run_scores(ids)
+    return engine.observability_comparison(scores_by_label)

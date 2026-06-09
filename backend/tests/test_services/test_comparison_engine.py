@@ -86,3 +86,39 @@ class TestPassRateComparison:
         })
         assert len(result["runs"]) == 1
         assert result["runs"][0]["pp_gap"] == 25.0
+
+
+class TestObservabilityComparison:
+    def test_observability_summary_flags_incomplete_runs(self):
+        engine = ComparisonEngine()
+        complete = ScoreResult(
+            run_id=uuid4(),
+            question_id="q-1",
+            actual_tool_calls=10,
+            observed_tool_results=10,
+            missing_tool_results=0,
+            trace_observability_rate=100.0,
+            agent_tool_success_rate=80.0,
+            overall_score=80.0,
+        )
+        incomplete = ScoreResult(
+            run_id=uuid4(),
+            question_id="q-1",
+            actual_tool_calls=10,
+            observed_tool_results=8,
+            missing_tool_results=2,
+            trace_observability_rate=80.0,
+            agent_tool_success_rate=100.0,
+            overall_score=90.0,
+        )
+
+        result = engine.observability_comparison({
+            "complete": [complete],
+            "incomplete": [incomplete],
+        })
+
+        assert result["runs"][0]["evaluation_validity"] == "valid"
+        assert result["runs"][1]["evaluation_validity"] == "trace_incomplete"
+        assert result["runs"][1]["can_claim_winner"] is False
+        assert result["runs"][1]["missing_tool_results"] == 2
+        assert result["runs"][1]["trace_observability_rate"] == 80.0

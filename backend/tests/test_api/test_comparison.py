@@ -49,3 +49,32 @@ def test_compare_pass_rate_returns_real_runs():
     data = response.json()
     assert data["runs"][0]["label"] == "skill-v2"
     assert data["runs"][0]["pass_at_k_pct"] == 100.0
+
+
+def test_compare_observability_returns_harness_quality():
+    run_id = uuid4()
+    run = TaskRun(id=run_id, benchmark_id="bench-1", run_label="skill-v2")
+    scores = [
+        ScoreResult(
+            run_id=run_id,
+            question_id="q-1",
+            actual_tool_calls=10,
+            observed_tool_results=8,
+            missing_tool_results=2,
+            actual_success_calls=8,
+            trace_observability_rate=80.0,
+            agent_tool_success_rate=100.0,
+            evaluation_validity="trace_incomplete",
+        )
+    ]
+
+    with patch("src.api.comparison.RunRepositoryImpl") as run_repo_cls, patch("src.api.comparison.ScoreRepositoryImpl") as score_repo_cls:
+        run_repo_cls.return_value.get = AsyncMock(return_value=run)
+        score_repo_cls.return_value.list_by_run = AsyncMock(return_value=scores)
+        response = client.get(f"/coworkeval/v1/compare/observability?run_ids={run_id}")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["runs"][0]["label"] == "skill-v2"
+    assert data["runs"][0]["trace_observability_rate"] == 80.0
+    assert data["runs"][0]["can_claim_winner"] is False

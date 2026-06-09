@@ -129,8 +129,34 @@ class TraceParser:
         assistant_msgs = [e for e in trace_data if e.get("type") == "assistant" and "thinking" in e]
 
         total_tool_calls = len(tool_calls)
-        success_tool_calls = sum(1 for r in tool_results if not r.get("tool_error", False))
-        failed_tool_calls = total_tool_calls - success_tool_calls
+        diagnostic = self.diagnose_integrity(trace_data)
+        has_identified_tools = any(
+            self._tool_event_id(e) for e in tool_calls + tool_results
+        )
+        if has_identified_tools:
+            call_ids = {self._tool_event_id(e) for e in tool_calls if self._tool_event_id(e)}
+            result_ids = {self._tool_event_id(e) for e in tool_results if self._tool_event_id(e)}
+            observed_result_ids = call_ids & result_ids
+            observed_tool_results = len(observed_result_ids)
+            missing_tool_results = len(call_ids - result_ids)
+            observed_results = [
+                e for e in tool_results if self._tool_event_id(e) in observed_result_ids
+            ]
+        else:
+            observed_tool_results = len(tool_results)
+            missing_tool_results = max(0, total_tool_calls - observed_tool_results)
+            observed_results = tool_results
+
+        success_tool_calls = sum(1 for r in observed_results if not r.get("tool_error", False))
+        failed_tool_calls = observed_tool_results - success_tool_calls
+        agent_tool_success_rate = (
+            (success_tool_calls / observed_tool_results * 100)
+            if observed_tool_results > 0 else 100.0
+        )
+        trace_observability_rate = (
+            (observed_tool_results / total_tool_calls * 100)
+            if total_tool_calls > 0 else 100.0
+        )
 
         result_records = [e for e in trace_data if e.get("type") == "result"]
         if result_records:
@@ -149,10 +175,14 @@ class TraceParser:
             "total_tool_calls": total_tool_calls,
             "success_tool_calls": success_tool_calls,
             "failed_tool_calls": failed_tool_calls,
-            "tool_success_rate": (
-                (success_tool_calls / total_tool_calls * 100)
-                if total_tool_calls > 0 else 100.0
+            "observed_tool_results": observed_tool_results,
+            "missing_tool_results": missing_tool_results,
+            "agent_tool_success_rate": agent_tool_success_rate,
+            "trace_observability_rate": trace_observability_rate,
+            "evaluation_validity": (
+                "valid" if diagnostic["integrity_status"] == "ok" else "trace_incomplete"
             ),
+            "tool_success_rate": agent_tool_success_rate,
             "total_tokens": input_tokens + output_tokens,
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,

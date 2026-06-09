@@ -157,6 +157,11 @@ class ScoreResult(BaseModel):
 
     actual_tool_calls: int = 0
     actual_success_calls: int = 0
+    observed_tool_results: int = 0
+    missing_tool_results: int = 0
+    agent_tool_success_rate: float = 100.0
+    trace_observability_rate: float = 100.0
+    evaluation_validity: str = "valid"
     actual_tokens: int = 0
     actual_rounds: int = 0
     actual_time_ms: int = 0
