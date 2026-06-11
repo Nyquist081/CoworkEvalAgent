@@ -13,6 +13,7 @@ from src.core.schemas import (
 )
 from src.infrastructure.llm_gateway import LLMClient
 from src.infrastructure.trace_parser import TraceParser
+from src.services.trace_condenser import TraceCondenser, CondensedTraceView
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,13 @@ If the user prompt contains "Trace 完整性诊断":
 - Do not penalize tool_accuracy only because a matching tool_result is absent.
 - Judge only the behavior that is actually observable in the trace.
 - If the missing observation prevents confident task-completion assessment, lower confidence in the explanation and state that the result is partially unverifiable.
+
+## Condensed Trace Boundary
+If the user prompt says judge_input_mode=condensed_trace:
+- The raw trace is still the source for numeric metrics, trace integrity, and confidence.
+- Condensed trace is used only for semantic judging.
+- Preserved raw evidence steps are authoritative; chunk summaries are secondary.
+- Do not invent missing details from summaries. If a scoring point needs evidence that is absent, say it is unverifiable.
 
 ### execution_efficiency (Action Efficiency)
 - 90-100: Path is extremely streamlined, every action purposeful, zero wasted steps
@@ -90,17 +98,17 @@ class JudgeEvaluator(BaseEvaluator):
         judge_repo: JudgeResultRepository,
         llm_client: LLMClient,
         max_retries: int = 3,
+        trace_condenser: TraceCondenser | None = None,
     ):
         self.judge_repo = judge_repo
         self.llm_client = llm_client
         self.max_retries = max_retries
         self.trace_parser = TraceParser()
+        self.trace_condenser = trace_condenser or TraceCondenser(llm_client)
 
     async def evaluate(
         self, run_id: UUID, question: QuestionItem, trace_data: list[dict]
     ) -> ScoreResult:
-        # Format trace as Step-numbered text
-        trace_text = self._format_trace(trace_data)
         trace_diagnostic = self.trace_parser.diagnose_integrity(trace_data)
 
         # Build user prompt with question context so judge can verify task relevance
@@ -114,6 +122,19 @@ class JudgeEvaluator(BaseEvaluator):
             if prompt_path.exists():
                 question_prompt = prompt_path.read_text(encoding="utf-8")[:1000]
 
+        judge_input_mode = "raw_trace"
+        condensed_trace: CondensedTraceView | None = None
+        if self.trace_condenser.should_condense(trace_data):
+            condensed_trace = await self.trace_condenser.condense(
+                trace_data,
+                fatal_rules=fatal_rules,
+                skills_expected=skills_expected,
+            )
+            trace_text = self._format_condensed_trace(condensed_trace)
+            judge_input_mode = "condensed_trace"
+        else:
+            trace_text = self._format_trace(trace_data)
+
         user_prompt = self._build_user_prompt(
             question_id=question.question_id,
             question_name=question.question_name,
@@ -124,6 +145,8 @@ class JudgeEvaluator(BaseEvaluator):
             expected_inputs=question.input_files,
             expected_output_dir=question.output_dir,
             trace_diagnostic=trace_diagnostic,
+            judge_input_mode=judge_input_mode,
+            condensed_trace=condensed_trace,
         )
 
         # Call LLM with retry
@@ -177,7 +200,21 @@ class JudgeEvaluator(BaseEvaluator):
             evolution_suggestions=verdict.evolution_suggestions,
             skill_compliance=verdict.skill_compliance,
             fatal_violations=verdict.fatal_violations,
-            raw_response=verdict.model_dump_json(),
+            raw_response=json.dumps(
+                {
+                    "verdict": verdict.model_dump(mode="json"),
+                    "judge_input": {
+                        "mode": judge_input_mode,
+                        "compression_ratio": (
+                            condensed_trace.compression_ratio if condensed_trace else 1.0
+                        ),
+                        "preserved_step_ids": (
+                            condensed_trace.preserved_step_ids if condensed_trace else []
+                        ),
+                    },
+                },
+                ensure_ascii=False,
+            ),
         )
         await self.judge_repo.save(judge_result)
 
@@ -198,6 +235,24 @@ class JudgeEvaluator(BaseEvaluator):
             lines.append("")
         return "\n".join(lines)
 
+    def _format_condensed_trace(self, condensed: CondensedTraceView) -> str:
+        lines = [
+            "judge_input_mode=condensed_trace",
+            f"original_event_count={condensed.original_event_count}",
+            f"original_char_count={condensed.original_char_count}",
+            f"condensed_char_count={condensed.condensed_char_count}",
+            f"compression_ratio={condensed.compression_ratio}",
+            f"preserved_step_ids={condensed.preserved_step_ids}",
+            "",
+            "## 不可压缩关键原文证据",
+            condensed.preserved_evidence_text or "无",
+            "",
+            "## 分块语义摘要",
+        ]
+        for summary in condensed.chunk_summaries:
+            lines.append(json.dumps(summary.model_dump(), ensure_ascii=False, indent=2))
+        return "\n".join(lines)
+
     def _build_user_prompt(
         self,
         question_id: str,
@@ -209,6 +264,8 @@ class JudgeEvaluator(BaseEvaluator):
         expected_inputs: list[str] | None = None,
         expected_output_dir: str = "",
         trace_diagnostic: dict | None = None,
+        judge_input_mode: str = "raw_trace",
+        condensed_trace: CondensedTraceView | None = None,
     ) -> str:
         parts = [
             f"## 评测题目",
@@ -246,6 +303,16 @@ class JudgeEvaluator(BaseEvaluator):
                 "裁判约束: 这是观测链路问题，不得仅因缺失 tool_result 将其判定为 Agent 工具调用失败。"
             )
             parts.append("")
+
+        parts.append("## Judge 输入模式")
+        parts.append(f"judge_input_mode: {judge_input_mode}")
+        if condensed_trace is not None:
+            parts.append("raw_trace_metrics_source: raw_trace")
+            parts.append("condensed_trace_used_for: judge_semantic_scoring")
+            parts.append(f"compression_ratio: {condensed_trace.compression_ratio}")
+            parts.append(f"preserved_step_ids: {condensed_trace.preserved_step_ids}")
+            parts.append("裁判约束: 数值型过程指标、完整性、置信度来自原始 trace；压缩内容只用于语义判断。")
+        parts.append("")
 
         # TASK RELEVANCE CHECK — the gate
         parts.append("## ⚠️ 任务相关性检查（最重要！先做这一步）")

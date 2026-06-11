@@ -1,3 +1,4 @@
+import json
 import pytest
 from uuid import uuid4
 from unittest.mock import AsyncMock, patch
@@ -7,6 +8,7 @@ from src.core.schemas import (
     JudgeVerdict, EfficiencyScore, ToolAccuracyScore, ThinkingScore,
     CompletionScore, FatalViolation, SkillCompliance,
 )
+from src.services.trace_condenser import TraceCondenser, TraceChunkSummary
 
 
 @pytest.fixture
@@ -91,6 +93,48 @@ async def test_judge_prompt_marks_missing_tool_result_as_harness_failure(questio
     assert "integrity_status: missing_tool_result" in user_prompt
     assert "failure_domain: harness" in user_prompt
     assert "do_not_penalize_agent_tool_accuracy" in user_prompt
+
+
+@pytest.mark.asyncio
+async def test_judge_uses_condensed_trace_for_long_trace(question, mock_verdict):
+    judge_repo = AsyncMock()
+    judge_repo.save = AsyncMock()
+    llm_client = AsyncMock()
+    llm_client.ask_structured_output = AsyncMock(
+        side_effect=[
+            TraceChunkSummary(
+                step_range="1-8",
+                task_progress="普通步骤已压缩",
+                important_raw_steps=[1, 7, 8],
+                summary="Condensed chunk summary",
+            ),
+            mock_verdict,
+        ]
+    )
+    trace_data = [{"type": "session_start", "model": "Claude-4"}]
+    for i in range(6):
+        trace_data.append({"type": "assistant", "thinking": "ordinary " + "x" * 200, "text": "ok"})
+    trace_data.append({"type": "result", "status": "success", "duration_ms": 1000,
+                       "input_tokens": 100, "output_tokens": 50, "cost_usd": 0.01})
+
+    condenser = TraceCondenser(llm_client, event_threshold=3, chunk_size=20)
+    evaluator = JudgeEvaluator(
+        judge_repo=judge_repo,
+        llm_client=llm_client,
+        trace_condenser=condenser,
+    )
+    await evaluator.evaluate(run_id=uuid4(), question=question, trace_data=trace_data)
+
+    judge_prompt = llm_client.ask_structured_output.call_args.kwargs["user_prompt"]
+    assert "judge_input_mode: condensed_trace" in judge_prompt
+    assert "raw_trace_metrics_source: raw_trace" in judge_prompt
+    assert "不可压缩关键原文证据" in judge_prompt
+    assert "分块语义摘要" in judge_prompt
+    assert "Condensed chunk summary" in judge_prompt
+    saved_result = judge_repo.save.call_args[0][0]
+    raw_response = json.loads(saved_result.raw_response)
+    assert raw_response["judge_input"]["mode"] == "condensed_trace"
+    assert raw_response["judge_input"]["preserved_step_ids"]
 
 
 @pytest.mark.asyncio
